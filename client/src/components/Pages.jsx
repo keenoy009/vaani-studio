@@ -24,7 +24,7 @@ export function Library({ onOpen, currentId }) {
             {r.status === "failed" && <span className="rounded-full bg-pink/15 px-2.5 py-1 text-[11px] font-bold text-pink">Failed</span>}
             {Object.entries(r.langs).map(([k, v]) => (
               <span key={k} className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: v.dubbed ? "rgba(110,231,183,0.14)" : "#232738", color: v.dubbed ? "#6EE7B7" : "#9AA3B8" }}>
-                {LANGS.find((l) => l.id === k)?.name} · {v.dubbed ? "dubbed" : `${v.approved}/${v.lines} approved`}
+                {LANGS.find((l) => l.id === k)?.name} · {v.dubbed ? "dubbed" : v.status === "failed" ? "failed" : v.status === "review" ? "needs re-render" : "working…"}
               </span>
             ))}
           </div>

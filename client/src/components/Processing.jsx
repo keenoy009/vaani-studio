@@ -5,7 +5,7 @@ const STEPS = [
   { id: "audio", name: "Extract audio", text: "Pulling the audio out of your video" },
   { id: "transcribe", name: "Transcribe", text: "Listening and separating speakers" },
   { id: "translate", name: "Translate", text: "Translating each line" },
-  { id: "ready", name: "Ready to review", text: "Almost there" },
+  { id: "voice", name: "Voice & mix", text: "Recording the dubbed voices and mixing" },
 ];
 
 export default function Processing({ job }) {
@@ -38,7 +38,7 @@ export default function Processing({ job }) {
             );
           })}
         </div>
-        <p className="m-0 text-sm text-mute">Usually about 30–60 seconds for a short clip. You can leave this tab open; the page updates by itself.</p>
+        <p className="m-0 text-sm text-mute">Usually about 1–2 minutes for a short clip. You can leave this tab open; the page updates by itself.</p>
       </div>
     </section>
   );

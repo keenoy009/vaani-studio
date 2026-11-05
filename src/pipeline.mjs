@@ -21,7 +21,6 @@ export const SOURCES = { hi: { name: "Hindi", code: "hi-IN" }, en: { name: "Engl
 
 const MAX_RATIO_BEFORE_TEMPO = 1.2;
 const TEMPO_MIN = 0.85, TEMPO_MAX = 1.25;
-const DUCK = 0.15;
 
 export async function makeJobDir(dir) { await mkdir(dir, { recursive: true }); return dir; }
 
@@ -83,13 +82,15 @@ export async function transcribe(audioPath, dir, sourceKey = "hi") {
   return segments;
 }
 
+// Accept only text written in the target script (plus plain Latin letters for names/brands and digits/punctuation).
+// ANY other letter (e.g. a stray Korean or Bengali character the LLM slipped in) rejects the line.
 function inRightScript(text, target) {
-  const letters = text.replace(/[\s\d\p{P}]/gu, "");
-  const good = (text.match(target.script) || []).length;
-  return letters.length > 0 && good / letters.length > 0.8;
+  const inScript = new RegExp(target.script.source);
+  const nonLatin = [...text].filter((c) => /\p{L}|\p{M}/u.test(c) && !/[A-Za-z]/.test(c));
+  return nonLatin.length > 0 && nonLatin.every((c) => inScript.test(c)); // at least one target letter, none from other scripts
 }
 
-/** LLM translate. Returns lines [{...segment, source_text, text, lang, edited, approved}]. */
+/** LLM translate. Returns lines [{...segment, source_text, text, lang, edited}]. */
 export async function translate(segments, targetKey, sourceKey = "hi") {
   const t = TARGETS[targetKey], s = SOURCES[sourceKey];
   const system =
@@ -104,16 +105,10 @@ export async function translate(segments, targetKey, sourceKey = "hi") {
     const byId = new Map(result.map((r) => [r.id, r.text]));
     const same = (x) => (byId.get(x.id) ?? "").trim() === x.text.trim(); // untranslated copy of the source
     if (segments.every((x) => inRightScript(byId.get(x.id) ?? "", t) && !same(x))) {
-      return segments.map((x) => ({ ...x, source_text: x.text, text: byId.get(x.id), lang: t.code, edited: false, approved: false }));
+      return segments.map((x) => ({ ...x, source_text: x.text, text: byId.get(x.id), lang: t.code, edited: false }));
     }
   }
   throw new Error(`LLM kept returning the wrong script for ${t.name}`);
-}
-
-/** Ask the LLM for a shorter version of a line (does NOT apply it). */
-export async function suggestShorter(line, targetKey) {
-  const slot = line.end - line.start;
-  return shorten(line, slot, TARGETS[targetKey]);
 }
 
 async function shorten(line, slot, target) {
@@ -133,11 +128,12 @@ export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoS
   line.tts_seconds = +duration(raw).toFixed(2);
 
   for (let tries = 1; autoShorten && tries <= 3 && line.tts_seconds / slot > MAX_RATIO_BEFORE_TEMPO; tries++) {
-    const shorter = await shorten({ ...line, tts_file: raw }, slot, t);
+    let shorter;
+    try { shorter = await shorten({ ...line, tts_file: raw }, slot, t); }
+    catch { break; } // shortening is a nice-to-have: if the LLM is down, keep the line and just speed it up
     if (!shorter || !inRightScript(shorter, t) || shorter.length >= line.text.length) continue;
     line.text = shorter;
-    line.shortened = true; // machine-shortened: human should re-check
-    line.approved = false;
+    line.shortened = true; // machine-shortened to fit the time slot (the UI shows a tag)
     await writeFile(raw, await tts(line.text, t.code, voice));
     line.tts_seconds = +duration(raw).toFixed(2);
   }
@@ -151,14 +147,19 @@ export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoS
   return line;
 }
 
-/** Duck original audio, overlay dub lines at their start times, copy the video stream. */
+/**
+ * Place each dub line at its start time and copy the video stream untouched.
+ * The ORIGINAL audio is dropped entirely (volume 0): only the dubbed voices are heard.
+ * Audio is padded with silence and cut at the video's end (-shortest), so lengths always match.
+ */
 export function mix(video, lines, outPath) {
   const args = ["-y", "-v", "error", "-i", video];
   lines.forEach((l) => args.push("-i", l.fit_file));
-  const parts = [`[0:a]volume=${DUCK}[orig]`];
-  lines.forEach((l, i) => { const ms = Math.round(l.start * 1000); parts.push(`[${i + 1}:a]adelay=${ms}|${ms}[d${i}]`); });
-  parts.push(`[orig]${lines.map((_, i) => `[d${i}]`).join("")}amix=inputs=${lines.length + 1}:normalize=0:duration=first[mix]`);
-  args.push("-filter_complex", parts.join(";"), "-map", "0:v", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", outPath);
+  const parts = lines.map((l, i) => { const ms = Math.round(l.start * 1000); return `[${i + 1}:a]adelay=${ms}|${ms}[d${i}]`; });
+  const labels = lines.map((_, i) => `[d${i}]`).join("");
+  // amix needs 2+ inputs; with a single line just pad it.
+  parts.push(lines.length > 1 ? `${labels}amix=inputs=${lines.length}:normalize=0:duration=longest,apad[mix]` : `${labels}apad[mix]`);
+  args.push("-filter_complex", parts.join(";"), "-map", "0:v", "-map", "[mix]", "-c:v", "copy", "-c:a", "aac", "-b:a", "160k", "-shortest", outPath);
   execFileSync("ffmpeg", args);
   return outPath;
 }

@@ -41,15 +41,11 @@ export default function Telegram({ job, langId, L, tg, onError }) {
   const [group, setGroup] = useState(null);
   const [sending, setSending] = useState(false);
   const [sentMsg, setSentMsg] = useState("");
-  const total = L.lines.length;
-  const approved = L.lines.filter((l) => l.approved).length;
-  const allOk = total > 0 && approved === total;
   const g = tg.groups.find((x) => x.id === group) || tg.groups[0];
-  const reason = !allOk ? `Locked · ${approved} of ${total} lines approved`
-    : !L.dubbed ? "Locked · render the dub first"
+  const reason = !L.dubbed ? "Locked · dub is not ready"
     : !tg.online ? "Locked · bot is offline"
     : !g ? "Locked · no group linked" : "Send to Telegram";
-  const canSend = allOk && L.dubbed && tg.online && !!g && !sending;
+  const canSend = L.dubbed && tg.online && !!g && !sending;
 
   const send = async () => {
     setSending(true); setSentMsg("");

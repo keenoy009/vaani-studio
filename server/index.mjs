@@ -1,8 +1,8 @@
 // Vaani Studio backend.
 // Run:  npm start   (node --env-file=.env server/index.mjs)
 //
-// Flow:  POST /api/jobs (upload) -> background: audio, transcribe, translate
-//        -> human edits/approves lines -> POST /api/jobs/:id/langs/:lang/render (needs ALL lines approved)
+// Flow:  POST /api/jobs (upload) -> background: audio, transcribe, then for each target language:
+//        translate -> voice every line -> mix  (no approval step; lines can optionally be edited, then re-rendered)
 //        -> GET /api/jobs/:id/langs/:lang/video
 import express from "express";
 import multer from "multer";
@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
-import { extractAudio, transcribe, translate, voiceLine, suggestShorter, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
+import { extractAudio, transcribe, translate, voiceLine, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
 import { duration, tts } from "../src/tts.mjs";
 import { execFileSync } from "node:child_process";
 
@@ -53,7 +53,7 @@ const langDir = async (job, lang) => { const d = join(jobDir(job.id), TARGETS[la
 const publicLine = ({ fit_file, ...rest }) => rest;
 const publicJob = (j) => ({
   ...j,
-  langs: Object.fromEntries(Object.entries(j.langs).map(([k, v]) => [k, { ...v, lines: v.lines.map(publicLine), allApproved: v.lines.length > 0 && v.lines.every((l) => l.approved) }])),
+  langs: Object.fromEntries(Object.entries(j.langs).map(([k, v]) => [k, { ...v, lines: v.lines.map(publicLine) }])),
 });
 
 // ---------- pipeline runners (background) ----------
@@ -82,7 +82,7 @@ async function runJob(job, targets) {
     if (!job.segments.length) throw new Error("No speech found in this video.");
     job.stage = "translate";
     await save(job);
-    for (const lang of targets) await translateLang(job, lang);
+    for (const lang of targets) { job.stage = "translate"; await dubLang(job, lang); }
     job.status = "review";
     job.stage = "ready";
   } catch (e) {
@@ -99,8 +99,8 @@ async function renderLang(job, lang) {
     const dir = await langDir(job, lang);
     for (const line of L.lines) {
       line.voice = voiceFor(job, line.speaker);
-      // never rewrite human-approved text: autoShorten off
-      await voiceLine(line, lang, dir, line.voice, { autoShorten: false });
+      // Too-long machine translations are shortened to fit; a line the user typed themselves is never rewritten.
+      await voiceLine(line, lang, dir, line.voice, { autoShorten: !line.edited });
     }
     mix(join(jobDir(job.id), job.videoFile), L.lines, join(dir, "dubbed.mp4"));
     L.dubbed = true;
@@ -110,6 +110,15 @@ async function renderLang(job, lang) {
     L.error = e.message;
   }
   await save(job);
+}
+
+/** One click = translate (if not done yet) then voice + mix. Safe to call again after a failure. */
+async function dubLang(job, lang) {
+  if (!job.langs[lang]?.lines.length) await translateLang(job, lang);
+  if (job.langs[lang].status === "failed") return; // translation failed; error is on the language
+  job.stage = "voice";
+  await save(job);
+  await renderLang(job, lang);
 }
 
 // ---------- HTTP ----------
@@ -162,22 +171,22 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
 app.get("/api/jobs", (req, res) =>
   res.json([...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((j) => ({
     id: j.id, originalName: j.originalName, status: j.status, stage: j.stage, createdAt: j.createdAt, source: j.source, duration: j.duration,
-    langs: Object.fromEntries(Object.entries(j.langs).map(([k, v]) => [k, { status: v.status, dubbed: v.dubbed, lines: v.lines.length, approved: v.lines.filter((l) => l.approved).length }])),
+    langs: Object.fromEntries(Object.entries(j.langs).map(([k, v]) => [k, { status: v.status, dubbed: v.dubbed, lines: v.lines.length }])),
   }))));
 
 app.get("/api/jobs/:id", (req, res) => { const j = getJob(req, res); if (j) res.json(publicJob(j)); });
 
-// Add another target language to an existing job (translates in the background)
+// Dub into another language (translate + voice + mix in the background). Also retries a failed one.
 app.post("/api/jobs/:id/langs/:lang", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
   if (!TARGETS[req.params.lang]) return res.status(400).json({ error: "Unknown language" });
   if (job.status !== "review") return res.status(409).json({ error: "Job is not ready yet" });
   if (job.langs[req.params.lang] && job.langs[req.params.lang].status !== "failed") return res.status(409).json({ error: "Language already added" });
-  translateLang(job, req.params.lang);
+  dubLang(job, req.params.lang);
   res.status(202).json({ ok: true });
 });
 
-// Edit a line's text -> marks edited, clears approval, invalidates the dub
+// Edit a line's text -> marks it edited and invalidates the dub (the user re-renders afterwards)
 app.patch("/api/jobs/:id/langs/:lang/lines/:lineId", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
   const L = getLang(req, res, job); if (!L) return;
@@ -186,48 +195,17 @@ app.patch("/api/jobs/:id/langs/:lang/lines/:lineId", async (req, res) => {
   if (!line) return res.status(404).json({ error: "Line not found" });
   const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
   if (!text || text.length > 1000) return res.status(400).json({ error: "text must be 1-1000 characters" });
-  if (text !== line.text) { line.text = text; line.edited = true; line.approved = false; line.shortened = false; L.dubbed = false; L.status = "review"; }
+  if (text !== line.text) { line.text = text; line.edited = true; line.shortened = false; L.dubbed = false; L.status = "review"; }
   await save(job);
   res.json(publicLine(line));
 });
 
-// Approve / un-approve one line: { approved: true|false }
-app.post("/api/jobs/:id/langs/:lang/lines/:lineId/approve", async (req, res) => {
-  const job = getJob(req, res); if (!job) return;
-  const L = getLang(req, res, job); if (!L) return;
-  if (L.status === "rendering" || L.status === "translating") return res.status(409).json({ error: "Busy, try again in a moment" });
-  const line = L.lines.find((l) => String(l.id) === req.params.lineId);
-  if (!line) return res.status(404).json({ error: "Line not found" });
-  line.approved = req.body.approved !== false;
-  await save(job);
-  res.json(publicLine(line));
-});
-
-// Timing check for ONE line: speaks it and reports ratio; suggests a shorter text if too long (not applied).
-app.post("/api/jobs/:id/langs/:lang/lines/:lineId/check", async (req, res) => {
-  const job = getJob(req, res); if (!job) return;
-  const L = getLang(req, res, job); if (!L) return;
-  const line = L.lines.find((l) => String(l.id) === req.params.lineId);
-  if (!line) return res.status(404).json({ error: "Line not found" });
-  try {
-    const dir = await langDir(job, req.params.lang);
-    const probe = { ...line, id: `check_${line.id}` };
-    await voiceLine(probe, req.params.lang, dir, voiceFor(job, line.speaker), { autoShorten: false });
-    const slot = line.end - line.start;
-    const ratio = +(probe.tts_seconds / slot).toFixed(2);
-    const out = { slot: +slot.toFixed(2), spoken: probe.tts_seconds, ratio, fits: ratio <= 1.25 };
-    if (!out.fits) out.suggestion = await suggestShorter(line, req.params.lang);
-    res.json(out);
-  } catch (e) { res.status(502).json({ error: e.message }); }
-});
-
-// Render the dub. Locked until EVERY line is approved.
+// Re-render the dub (after editing a line or changing a voice).
 app.post("/api/jobs/:id/langs/:lang/render", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
   const L = getLang(req, res, job); if (!L) return;
   if (L.status === "rendering" || L.status === "translating") return res.status(409).json({ error: "Busy" });
-  const pending = L.lines.filter((l) => !l.approved).length;
-  if (pending) return res.status(409).json({ error: `${pending} line(s) still need approval`, pending });
+  if (!L.lines.length) return res.status(409).json({ error: "Nothing to render yet" });
   renderLang(job, req.params.lang); // background
   res.status(202).json({ ok: true });
 });
@@ -314,13 +292,11 @@ async function tgState() {
 }
 app.get("/api/telegram", async (req, res) => res.json(await tgState()));
 
-// Send a finished dub to a Telegram group. The approval lock is enforced HERE, not only in the UI.
+// Send a finished dub to a Telegram group. Only a rendered, up-to-date dub can be sent (enforced here, not only in the UI).
 app.post("/api/jobs/:id/langs/:lang/send", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
   const L = getLang(req, res, job); if (!L) return;
-  const pending = L.lines.filter((l) => !l.approved).length;
-  if (pending) return res.status(409).json({ error: `${pending} line(s) still need approval` });
-  if (!L.dubbed) return res.status(409).json({ error: "Render the dub first" });
+  if (!L.dubbed) return res.status(409).json({ error: "The dub is not ready yet" });
   const tg = await tgState();
   if (!tg.online) return res.status(501).json({ error: "The Telegram bot is not set up yet." });
   res.status(501).json({ error: "Sending is not implemented yet." });

@@ -7,6 +7,7 @@ import Timing from "./components/Timing.jsx";
 import Review from "./components/Review.jsx";
 import Telegram, { useTelegram } from "./components/Telegram.jsx";
 import Captions from "./components/Captions.jsx";
+import VoiceBar from "./components/VoiceBar.jsx";
 import { Library, Settings, BotPage } from "./components/Pages.jsx";
 
 const store = (key) => ({
@@ -31,7 +32,6 @@ export default function App() {
   const [page, setPage] = useState(() => { const p = new URLSearchParams(location.search).get("page"); return NAV.some((n) => n.id === p) ? p : "studio"; });
   const [lang, setLang] = useState(null);
   const [mode, setMode] = useState("orig"); // orig | dub
-  const [checks, setChecks] = useState({}); // "kn-0" -> timing check result
   const [err, setErr] = useState("");
   const [dubVer, setDubVer] = useState(0); // bumps when a new dub finishes so <video> reloads
   const [t, setT] = useState(0);
@@ -67,36 +67,31 @@ export default function App() {
     if (ids.length && !ids.includes(lang)) setLang(ids[0]);
   }, [job, lang]);
 
-  // When a render finishes, show the dubbed version.
+  // Show the dubbed version as soon as one is ready; fall back to the original when the dub is cleared.
   const L = job && lang ? job.langs[lang] : null;
-  const wasRendering = useRef(false);
+  const lastRender = useRef("");
   useEffect(() => {
     if (!L) return;
-    if (wasRendering.current && L.status === "done") { setDubVer((v) => v + 1); setMode("dub"); }
-    wasRendering.current = L.status === "rendering";
-    if (!L.dubbed && mode === "dub") setMode("orig");
-  }, [L, mode]);
+    const stamp = `${lang}|${L.dubbed}|${L.status}`;
+    if (L.dubbed && lastRender.current !== stamp) { setDubVer((v) => v + 1); setMode("dub"); }
+    if (!L.dubbed) setMode("orig");
+    lastRender.current = stamp;
+  }, [L, lang]);
 
   const guard = (fn) => async (...a) => {
     setErr("");
     try { return await fn(...a); } catch (e) { setErr(e.message); }
   };
 
-  const open = (id) => { jobStore.set(id); setJobId(id); setJob(null); setLang(null); setChecks({}); setMode("orig"); setT(0); setPage("studio"); };
+  const open = (id) => { jobStore.set(id); setJobId(id); setJob(null); setLang(null); setMode("orig"); setT(0); setPage("studio"); };
   const onUpload = guard(async (file, source, targets) => { open((await api.create(file, source, targets)).id); });
   const onSample = guard(async () => { open((await api.sample()).id); });
-  const newDub = () => { jobStore.set(null); setJobId(null); setJob(null); setLang(null); setChecks({}); setErr(""); setPage("studio"); };
+  const newDub = () => { jobStore.set(null); setJobId(null); setJob(null); setLang(null); setErr(""); setPage("studio"); };
 
   const actions = {
     edit: guard(async (lineId, text) => { await api.edit(job.id, lang, lineId, text); await refresh(); }),
-    approve: guard(async (lineId, approved) => { await api.approve(job.id, lang, lineId, approved); await refresh(); }),
     render: guard(async () => { await api.render(job.id, lang); await refresh(); }),
     addLang: guard(async (id) => { await api.addLang(job.id, id); setLang(id); await refresh(); }),
-    check: guard(async (lineId) => {
-      const line = L.lines.find((l) => l.id === lineId);
-      const r = await api.check(job.id, lang, lineId);
-      setChecks((c) => ({ ...c, [`${lang}-${lineId}`]: { ...r, text: line.text } }));
-    }),
   };
 
   const view = !jobId ? "upload" : !job ? "loading" : job.status === "processing" ? "processing" : job.status === "failed" ? "failed" : "studio";
@@ -170,12 +165,12 @@ export default function App() {
                 <div className="flex min-w-0 flex-[999_1_620px] flex-col gap-6">
                   <section className="flex flex-col gap-3.5 rounded-[28px] border border-line bg-panel p-3.5">
                     <Player ref={playerRef} job={job} langId={lang} L={L} mode={mode} setMode={setMode} dubVer={dubVer} onTime={setT} />
-                    <Timing job={job} langId={lang} L={L} checks={checks} t={t} onSeek={(s) => playerRef.current?.seek(s)} />
+                    <Timing job={job} L={L} t={t} onSeek={(s) => playerRef.current?.seek(s)} />
                     <div className="grid grid-cols-4 gap-2.5 px-0.5 pb-0.5 max-md:grid-cols-2">
                       {LANGS.map((l) => {
                         const data = job.langs[l.id];
                         const active = lang === l.id;
-                        const label = !data ? "Add language" : { translating: "Translating…", review: "In review", rendering: "Rendering…", done: "Dub ready", failed: "Failed" }[data.status];
+                        const label = !data ? "Click to dub" : { translating: "Translating…", review: "Needs re-render", rendering: "Voicing…", done: "Dub ready", failed: "Failed · tap to retry" }[data.status];
                         const dot = !data ? "#4A5068" : data.status === "done" ? "#6EE7B7" : data.status === "failed" ? "#FFA6E7" : "#A99BFF";
                         return (
                           <button key={l.id} type="button" aria-pressed={active}
@@ -188,9 +183,10 @@ export default function App() {
                         );
                       })}
                     </div>
+                    <VoiceBar job={job} L={L} onChanged={refresh} onRender={actions.render} onError={setErr} />
                   </section>
 
-                  <Review job={job} langId={lang} L={L} checks={checks} actions={actions} seek={(s) => playerRef.current?.seek(s)} />
+                  <Review job={job} langId={lang} L={L} actions={actions} seek={(s) => playerRef.current?.seek(s)} />
                 </div>
 
                 <aside className="flex min-w-0 max-w-[420px] flex-[1_1_380px] flex-col gap-6 max-lg:max-w-none">

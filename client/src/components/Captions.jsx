@@ -15,8 +15,8 @@ export default function Captions({ job, langId, L }) {
   const src = SOURCES[job.source];
 
   const text = {
-    x: `Same video. ${names.length > 1 ? `${names.length} Indian languages` : `Now in ${list}`}. Each line reviewed by a human before it goes out.\n\nBuilt on @GnaniAi Prisma + Timbre for the Great Indian AI Internship Challenge.\n\n#GnaniAI #GreatIndianAIInternshipChallenge`,
-    in: `Most videos are made in ${src}, but the people who need them speak ${list}.\n\nI built Vaani Studio: upload a video, review every translated line, and send the dubbed version to a Telegram group. It runs on Gnani AI's Prisma (speech-to-text) and Timbre (text-to-speech).\n\nBuilt for the Great Indian AI Internship Challenge.\n\n#GnaniAI #GreatIndianAIInternshipChallenge`,
+    x: `Same video. ${names.length > 1 ? `${names.length} Indian languages` : `Now in ${list}`}. Upload once, get the dubbed video back.\n\nBuilt on @GnaniAi Prisma + Timbre for the Great Indian AI Internship Challenge.\n\n#GnaniAI #GreatIndianAIInternshipChallenge`,
+    in: `Most videos are made in ${src}, but the people who need them speak ${list}.\n\nI built Vaani Studio: upload a video, pick a language and a voice, and send the dubbed version to a Telegram group. It runs on Gnani AI's Prisma (speech-to-text) and Timbre (text-to-speech).\n\nBuilt for the Great Indian AI Internship Challenge.\n\n#GnaniAI #GreatIndianAIInternshipChallenge`,
   }[tab];
 
   const copy = async () => {

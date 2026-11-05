@@ -1,15 +1,11 @@
 import { useState } from "react";
 
 // Timing match: for every line, the time slot in the original (lavender) vs how long the dubbed
-// speech takes (pink). Dubbed lengths are REAL measurements: from "Check timing" or from a finished render.
-export default function Timing({ job, langId, L, checks, t, onSeek }) {
+// speech takes (pink). Dubbed lengths are REAL measurements taken when the dub was rendered.
+export default function Timing({ job, L, t, onSeek }) {
   const [tab, setTab] = useState("both");
   const total = job.duration || Math.max(...L.lines.map((l) => l.end), 1);
-  const spokenOf = (l) => {
-    if (L.dubbed && l.fit_seconds) return l.fit_seconds;
-    const c = checks[`${langId}-${l.id}`];
-    return c && c.text === l.text ? c.spoken : null;
-  };
+  const spokenOf = (l) => (L.dubbed && l.fit_seconds ? l.fit_seconds : null);
   const measured = L.lines.filter((l) => spokenOf(l) != null).length;
   const pct = (s) => `${Math.min(100, (s / total) * 100)}%`;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => Math.round(f * total));
@@ -45,7 +41,7 @@ export default function Timing({ job, langId, L, checks, t, onSeek }) {
             </div>
           );
         })}
-        {showD && measured === 0 && <span className="absolute right-3 bottom-2 left-3 text-center text-xs text-mute">Press “Check timing” on a line to measure how long the dubbed speech really is.</span>}
+        {showD && measured === 0 && <span className="absolute right-3 bottom-2 left-3 text-center text-xs text-mute">The dubbed bars appear once the dub is rendered.</span>}
         <div className="absolute top-0 bottom-0 w-0.5 -translate-x-px rounded-sm bg-ink" style={{ left: pct(t) }} />
         {[0, 1, 2, 3].map((i) => (
           <button key={i} type="button" aria-label={`Jump to ${Math.round((i * total) / 4)} seconds`} onClick={() => onSeek((i * total) / 4)}

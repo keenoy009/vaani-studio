@@ -4,6 +4,9 @@
 A dubbing studio for Indian languages. User uploads a Hindi/English video → we transcribe with speaker separation → translate → a HUMAN reviews/edits/approves every line → we voice each line (cloned or studio voice) → time-fit + mix → dubbed MP4. A Telegram bot delivers results to groups (health workers, farmers, students).
 Built for the Gnani AI "Great Indian AI Internship Challenge". Deadline: Nov 10 2026, 11:59 PM IST. I (the user) am a student; explain every step in plain language, tell me exactly which file to create and which command to run.
 
+## Decisions that changed the brief (newest wins)
+- Nov 5: The user REMOVED the approval gate. No approve buttons; clicking a language translates + voices + mixes automatically. Lines stay editable, then "Re-render". Too-long machine translations are auto-shortened (user-edited lines never are). Voice per speaker is chosen on the studio page. Original audio is fully muted (volume 0): only the dub is heard. "Send to Telegram" now only needs a finished, up-to-date dub.
+
 ## Rules for you (Claude Code)
 - Guide me step by step. Small steps, run and verify each one before the next.
 - Never put API keys in code or chat. Use `.env` (gitignored) and `.env.example`.
