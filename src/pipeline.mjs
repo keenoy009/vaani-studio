@@ -13,6 +13,9 @@ export const TARGETS = {
   kn: { name: "Kannada", code: "kn-IN", script: /[ಀ-೿]/g, example: "ನಮಸ್ಕಾರ ಸ್ನೇಹಿತರೇ" },
   ta: { name: "Tamil", code: "ta-IN", script: /[஀-௿]/g, example: "வணக்கம் நண்பர்களே" },
   te: { name: "Telugu", code: "te-IN", script: /[ఀ-౿]/g, example: "నమస్కారం మిత్రులారా" },
+  // Marathi shares the Devanagari script with Hindi, so the script check alone cannot tell them apart;
+  // translate() also rejects any line that comes back identical to the Hindi source.
+  mr: { name: "Marathi", code: "mr-IN", script: /[ऀ-ॿ]/g, example: "नमस्कार मित्रांनो" },
 };
 export const SOURCES = { hi: { name: "Hindi", code: "hi-IN" }, en: { name: "English", code: "en-IN" } };
 
@@ -99,7 +102,8 @@ export async function translate(segments, targetKey, sourceKey = "hi") {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const result = await askJson(system, user);
     const byId = new Map(result.map((r) => [r.id, r.text]));
-    if (segments.every((x) => inRightScript(byId.get(x.id) ?? "", t))) {
+    const same = (x) => (byId.get(x.id) ?? "").trim() === x.text.trim(); // untranslated copy of the source
+    if (segments.every((x) => inRightScript(byId.get(x.id) ?? "", t) && !same(x))) {
       return segments.map((x) => ({ ...x, source_text: x.text, text: byId.get(x.id), lang: t.code, edited: false, approved: false }));
     }
   }

@@ -3,7 +3,7 @@ import { LANGS, SOURCES } from "../api.js";
 
 const OK = /\.(mp4|mov|mkv|webm|m4v)$/i;
 
-export default function Upload({ onUpload }) {
+export default function Upload({ onUpload, onSample }) {
   const [file, setFile] = useState(null);
   const [source, setSource] = useState("hi");
   const [targets, setTargets] = useState(["kn"]);
@@ -65,11 +65,16 @@ export default function Upload({ onUpload }) {
         </div>
 
         {msg && <p role="alert" className="m-0 text-sm text-pink">{msg}</p>}
-        <button type="button" disabled={!file || busy} onClick={go}
-          className="h-12 rounded-full border-0 px-8 text-sm font-bold"
-          style={{ background: file && !busy ? "#A99BFF" : "#232738", color: file && !busy ? "#0B0A18" : "#6B7390" }}>
-          {busy ? "Uploading…" : "Start dubbing"}
-        </button>
+        <div className="flex flex-wrap justify-center gap-3">
+          <button type="button" disabled={!file || busy} onClick={go}
+            className="h-12 rounded-full border-0 px-8 text-sm font-bold"
+            style={{ background: file && !busy ? "#A99BFF" : "#232738", color: file && !busy ? "#0B0A18" : "#6B7390" }}>
+            {busy ? "Uploading…" : "Start dubbing"}
+          </button>
+          <button type="button" disabled={busy} onClick={async () => { setBusy(true); await onSample(); setBusy(false); }}
+            title="A made-up two-speaker Hindi clip (about 12 s) voiced by Timbre. No real person's voice."
+            className="h-12 rounded-full border border-[#343A55] bg-transparent px-6 text-sm font-semibold text-ink disabled:opacity-50">Use sample video</button>
+        </div>
       </div>
     </section>
   );

@@ -11,11 +11,25 @@ import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
 import { extractAudio, transcribe, translate, voiceLine, suggestShorter, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
-import { duration } from "../src/tts.mjs";
+import { duration, tts } from "../src/tts.mjs";
+import { execFileSync } from "node:child_process";
 
 const PORT = process.env.PORT || 3001;
 const JOBS_DIR = resolve("work/jobs");
-const VOICES = ["Shivani", "Avinash", "Lakshmi", "Devansh", "Riyaa", "Prakash"]; // one per speaker, rotating
+// Timbre v3.0 voices (from the Gnani docs). Default: one per speaker, rotating; the user can override per speaker.
+const VOICE_LIST = [
+  { name: "Shivani", gender: "Female", persona: "Warm, empathetic" }, { name: "Avinash", gender: "Male", persona: "Professional" },
+  { name: "Lakshmi", gender: "Female", persona: "Expressive, energetic" }, { name: "Devansh", gender: "Male", persona: "Conversational" },
+  { name: "Kalpana", gender: "Female", persona: "Warm, empathetic" }, { name: "Shubham", gender: "Male", persona: "Expressive, energetic" },
+  { name: "Chetana", gender: "Female", persona: "Warm, empathetic" }, { name: "Prakash", gender: "Male", persona: "Professional" },
+  { name: "Vasudha", gender: "Female", persona: "Expressive, energetic" }, { name: "Yashraj", gender: "Male", persona: "Warm, empathetic" },
+  { name: "Riyaa", gender: "Female", persona: "Confident, authoritative" }, { name: "Harshad", gender: "Male", persona: "Professional" },
+  { name: "Tarika", gender: "Female", persona: "Warm, empathetic" },
+];
+const VOICE_NAMES = new Set(VOICE_LIST.map((v) => v.name));
+const DEFAULT_ORDER = ["Shivani", "Avinash", "Lakshmi", "Devansh", "Riyaa", "Prakash"];
+const speakersOf = (job) => [...new Set(job.segments.map((s) => s.speaker))].sort((a, b) => a - b);
+const voiceFor = (job, speaker) => job.voices?.[speaker] ?? DEFAULT_ORDER[Math.max(0, speakersOf(job).indexOf(speaker)) % DEFAULT_ORDER.length];
 const ALLOWED_EXT = new Set([".mp4", ".mov", ".mkv", ".webm", ".m4v"]);
 
 await mkdir(JOBS_DIR, { recursive: true });
@@ -83,9 +97,8 @@ async function renderLang(job, lang) {
   L.status = "rendering"; L.error = null; await save(job);
   try {
     const dir = await langDir(job, lang);
-    const speakers = [...new Set(L.lines.map((l) => l.speaker))];
     for (const line of L.lines) {
-      line.voice = VOICES[speakers.indexOf(line.speaker) % VOICES.length];
+      line.voice = voiceFor(job, line.speaker);
       // never rewrite human-approved text: autoShorten off
       await voiceLine(line, lang, dir, line.voice, { autoShorten: false });
     }
@@ -147,7 +160,10 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
 });
 
 app.get("/api/jobs", (req, res) =>
-  res.json([...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((j) => ({ id: j.id, originalName: j.originalName, status: j.status, stage: j.stage, createdAt: j.createdAt }))));
+  res.json([...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((j) => ({
+    id: j.id, originalName: j.originalName, status: j.status, stage: j.stage, createdAt: j.createdAt, source: j.source, duration: j.duration,
+    langs: Object.fromEntries(Object.entries(j.langs).map(([k, v]) => [k, { status: v.status, dubbed: v.dubbed, lines: v.lines.length, approved: v.lines.filter((l) => l.approved).length }])),
+  }))));
 
 app.get("/api/jobs/:id", (req, res) => { const j = getJob(req, res); if (j) res.json(publicJob(j)); });
 
@@ -196,7 +212,7 @@ app.post("/api/jobs/:id/langs/:lang/lines/:lineId/check", async (req, res) => {
   try {
     const dir = await langDir(job, req.params.lang);
     const probe = { ...line, id: `check_${line.id}` };
-    await voiceLine(probe, req.params.lang, dir, line.voice || VOICES[0], { autoShorten: false });
+    await voiceLine(probe, req.params.lang, dir, voiceFor(job, line.speaker), { autoShorten: false });
     const slot = line.end - line.start;
     const ratio = +(probe.tts_seconds / slot).toFixed(2);
     const out = { slot: +slot.toFixed(2), spoken: probe.tts_seconds, ratio, fits: ratio <= 1.25 };
@@ -223,8 +239,91 @@ app.get("/api/jobs/:id/langs/:lang/video", (req, res) => {
   const L = getLang(req, res, j); if (!L) return;
   const f = join(jobDir(j.id), TARGETS[req.params.lang].code, "dubbed.mp4");
   if (!L.dubbed || !existsSync(f)) return res.status(404).json({ error: "Not rendered yet (or edited since)" });
+  if (req.query.clip) { // "Export Ns clip": first N seconds, stream-copied (no re-encode)
+    const secs = Math.min(600, Math.max(1, Number(req.query.clip) || 60));
+    const out = join(jobDir(j.id), TARGETS[req.params.lang].code, `clip_${secs}.mp4`);
+    execFileSync("ffmpeg", ["-y", "-v", "error", "-i", f, "-t", String(secs), "-c", "copy", out]);
+    return res.download(out, `clip${secs}s_${req.params.lang}_${j.originalName.replace(/\.[^.]+$/, "")}.mp4`);
+  }
   if (req.query.download) return res.download(f, `dubbed_${req.params.lang}_${j.originalName.replace(/\.[^.]+$/, "")}.mp4`);
   res.sendFile(f);
+});
+
+// ---------- sample video: a synthetic two-speaker Hindi clip made with Timbre (no real people's voices) ----------
+const SAMPLE_LINES = [
+  { voice: "Shivani", text: "खाना खाने से पहले हाथ साबुन से धोएं।" },
+  { voice: "Avinash", text: "कम से कम बीस सेकंड तक हाथ रगड़ें।" },
+  { voice: "Shivani", text: "बच्चों को भी यही आदत सिखाएं।" },
+  { voice: "Avinash", text: "ज़्यादा जानकारी के लिए आशा दीदी से मिलें।" },
+];
+async function makeSample(job) {
+  const dir = jobDir(job.id);
+  const list = [];
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono", "-t", "0.7", "-c:a", "pcm_s16le", join(dir, "gap.wav")]);
+  for (let i = 0; i < SAMPLE_LINES.length; i++) {
+    const f = join(dir, `s${i}.wav`);
+    await writeFile(f, await tts(SAMPLE_LINES[i].text, "hi-IN", SAMPLE_LINES[i].voice));
+    list.push(`file '${f.replace(/\\/g, "/")}'`, `file '${join(dir, "gap.wav").replace(/\\/g, "/")}'`);
+  }
+  await writeFile(join(dir, "list.txt"), list.join("\n"));
+  const wav = join(dir, "sample.wav");
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", join(dir, "list.txt"), "-c", "copy", wav]);
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x12142A:s=1280x720:r=25", "-i", wav, "-t", String(duration(wav)),
+    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", join(dir, job.videoFile)]);
+}
+
+app.post("/api/samples", async (req, res) => {
+  const id = randomUUID();
+  await mkdir(jobDir(id), { recursive: true });
+  const job = {
+    id, status: "processing", stage: "audio", error: null, source: "hi",
+    originalName: "sample_handwashing_hi.mp4", videoFile: "input.mp4",
+    createdAt: new Date().toISOString(), duration: null, segments: [], langs: {}, voices: {},
+  };
+  jobs.set(id, job);
+  await save(job);
+  res.status(202).json(publicJob(job));
+  makeSample(job).then(() => runJob(job, ["kn"])).catch(async (e) => { job.status = "failed"; job.error = `Could not make the sample: ${e.message}`; await save(job); });
+});
+
+// ---------- voices ----------
+app.get("/api/voices", (req, res) => res.json(VOICE_LIST));
+app.get("/api/jobs/:id/voices", (req, res) => {
+  const job = getJob(req, res); if (!job) return;
+  res.json(speakersOf(job).map((sp, i) => ({ speaker: sp, label: `Speaker ${i + 1}`, voice: voiceFor(job, sp) })));
+});
+// body: { "<speakerId>": "VoiceName", ... }. Changing a voice invalidates any rendered dub.
+app.put("/api/jobs/:id/voices", async (req, res) => {
+  const job = getJob(req, res); if (!job) return;
+  if (Object.values(job.langs).some((l) => l.status === "rendering")) return res.status(409).json({ error: "Busy rendering" });
+  const valid = new Set(speakersOf(job).map(String));
+  for (const [sp, v] of Object.entries(req.body ?? {})) {
+    if (!valid.has(sp)) return res.status(400).json({ error: `Unknown speaker ${sp}` });
+    if (!VOICE_NAMES.has(v)) return res.status(400).json({ error: `Unknown voice ${v}` });
+  }
+  job.voices = { ...(job.voices ?? {}), ...req.body };
+  for (const l of Object.values(job.langs)) if (l.dubbed) { l.dubbed = false; l.status = "review"; }
+  await save(job);
+  res.json(speakersOf(job).map((sp, i) => ({ speaker: sp, label: `Speaker ${i + 1}`, voice: voiceFor(job, sp) })));
+});
+
+// ---------- Telegram (status is read from work/telegram.json, which the bot will write) ----------
+const TG_FILE = resolve("work/telegram.json");
+async function tgState() {
+  try { return JSON.parse(await readFile(TG_FILE, "utf8")); } catch { return { online: false, groups: [], viewers: [] }; }
+}
+app.get("/api/telegram", async (req, res) => res.json(await tgState()));
+
+// Send a finished dub to a Telegram group. The approval lock is enforced HERE, not only in the UI.
+app.post("/api/jobs/:id/langs/:lang/send", async (req, res) => {
+  const job = getJob(req, res); if (!job) return;
+  const L = getLang(req, res, job); if (!L) return;
+  const pending = L.lines.filter((l) => !l.approved).length;
+  if (pending) return res.status(409).json({ error: `${pending} line(s) still need approval` });
+  if (!L.dubbed) return res.status(409).json({ error: "Render the dub first" });
+  const tg = await tgState();
+  if (!tg.online) return res.status(501).json({ error: "The Telegram bot is not set up yet." });
+  res.status(501).json({ error: "Sending is not implemented yet." });
 });
 
 // Basic error handler (e.g. upload too large)

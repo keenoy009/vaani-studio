@@ -9,7 +9,7 @@ const ORB = [
   { bg: "linear-gradient(145deg,#38D9A0,#B5F5DC)", color: "#6EE7B7", glow: "0 0 0 6px rgba(110,231,183,0.20), 0 0 50px rgba(110,231,183,0.40)" },
 ];
 
-export default function Player({ ref, job, langId, L, mode, setMode, dubVer }) {
+export default function Player({ ref, job, langId, L, mode, setMode, dubVer, onTime }) {
   const video = useRef(null);
   const last = useRef({ t: 0, playing: false }); // carried across the Original <-> Dubbed switch
   const [t, setT] = useState(0);
@@ -45,7 +45,7 @@ export default function Player({ ref, job, langId, L, mode, setMode, dubVer }) {
         style={{ backgroundImage: "radial-gradient(520px 300px at 15% 0%, rgba(139,123,255,0.42), transparent 62%), radial-gradient(520px 320px at 92% 100%, rgba(255,166,231,0.30), transparent 62%)" }}>
         <video key={src} ref={video} src={src} playsInline preload="metadata" className="absolute inset-0 h-full w-full object-contain"
           onLoadedMetadata={onLoaded}
-          onTimeUpdate={(e) => { last.current.t = e.currentTarget.currentTime; setT(e.currentTarget.currentTime); }}
+          onTimeUpdate={(e) => { last.current.t = e.currentTarget.currentTime; setT(e.currentTarget.currentTime); onTime?.(e.currentTarget.currentTime); }}
           onPlay={() => { last.current.playing = true; setPlaying(true); }}
           onPause={() => { last.current.playing = false; setPlaying(false); }}
           onEnded={() => { last.current = { t: 0, playing: false }; setPlaying(false); }} />
@@ -100,7 +100,8 @@ export default function Player({ ref, job, langId, L, mode, setMode, dubVer }) {
           onChange={(e) => { const v = video.current; v.currentTime = +e.target.value; setT(+e.target.value); }} />
         {speakers.length > 1 && (
           <span className="inline-flex h-[34px] items-center gap-2 rounded-full border border-mint/30 bg-mint/10 px-3.5 text-xs font-semibold text-mint">
-            {speakers.length} speakers detected
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+            {dub ? "Each speaker keeps their own voice" : `${speakers.length} speakers detected`}
           </span>
         )}
       </div>

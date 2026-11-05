@@ -1,7 +1,7 @@
 // Gnani Timbre TTS helper + audio duration helper (shared by scripts and, later, the server).
 import { execFileSync } from "node:child_process";
 
-export const LANG_CODES = { kn: "kn-IN", ta: "ta-IN", te: "te-IN", hi: "hi-IN", en: "en-IN" };
+export const LANG_CODES = { kn: "kn-IN", ta: "ta-IN", te: "te-IN", mr: "mr-IN", hi: "hi-IN", en: "en-IN" };
 
 /** Returns a WAV Buffer (24 kHz mono) for `text` in language `code` (e.g. "kn-IN"). */
 export async function tts(text, code, voice = "Shivani") {
