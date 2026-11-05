@@ -31,6 +31,8 @@ const DEFAULT_ORDER = ["Shivani", "Avinash", "Lakshmi", "Devansh", "Riyaa", "Pra
 const speakersOf = (job) => [...new Set(job.segments.map((s) => s.speaker))].sort((a, b) => a - b);
 const voiceFor = (job, speaker) => job.voices?.[speaker] ?? DEFAULT_ORDER[Math.max(0, speakersOf(job).indexOf(speaker)) % DEFAULT_ORDER.length];
 const ALLOWED_EXT = new Set([".mp4", ".mov", ".mkv", ".webm", ".m4v"]);
+// Bump when the audio mix changes in a way that makes older rendered files wrong. v2 = original audio fully muted.
+const MIX_VERSION = 2;
 
 await mkdir(JOBS_DIR, { recursive: true });
 
@@ -41,7 +43,11 @@ for (const id of await readdir(JOBS_DIR)) {
     const j = JSON.parse(await readFile(join(JOBS_DIR, id, "job.json"), "utf8"));
     // a job that was mid-flight when the server stopped cannot continue
     if (j.status === "processing") { j.status = "failed"; j.error = "Server restarted during processing"; }
-    for (const l of Object.values(j.langs)) if (["translating", "rendering"].includes(l.status)) { l.status = "failed"; l.error = "Server restarted"; }
+    for (const l of Object.values(j.langs)) {
+      if (["translating", "rendering"].includes(l.status)) { l.status = "failed"; l.error = "Server restarted"; }
+      // Dubs rendered by an older mixer (e.g. with the original audio only turned down, not muted) must not be shown as current.
+      if (l.dubbed && l.mixVersion !== MIX_VERSION) { l.dubbed = false; l.status = "review"; }
+    }
     jobs.set(id, j);
   } catch { /* not a job folder */ }
 }
@@ -104,6 +110,7 @@ async function renderLang(job, lang) {
     }
     mix(join(jobDir(job.id), job.videoFile), L.lines, join(dir, "dubbed.mp4"));
     L.dubbed = true;
+    L.mixVersion = MIX_VERSION;
     L.status = "done";
   } catch (e) {
     L.status = "failed";
@@ -283,6 +290,27 @@ app.put("/api/jobs/:id/voices", async (req, res) => {
   for (const l of Object.values(job.langs)) if (l.dubbed) { l.dubbed = false; l.status = "review"; }
   await save(job);
   res.json(speakersOf(job).map((sp, i) => ({ speaker: sp, label: `Speaker ${i + 1}`, voice: voiceFor(job, sp) })));
+});
+
+// ---------- thumbnails (Library cards) ----------
+app.get("/api/jobs/:id/thumb", (req, res) => {
+  const j = getJob(req, res); if (!j) return;
+  const out = join(jobDir(j.id), "thumb.jpg");
+  try {
+    if (!existsSync(out)) execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", "1", "-i", join(jobDir(j.id), j.videoFile), "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4", out]);
+    res.sendFile(out);
+  } catch { res.status(404).json({ error: "No thumbnail" }); }
+});
+
+// ---------- which services are configured (booleans only, never the keys) ----------
+app.get("/api/status", async (req, res) => {
+  const tg = await tgState();
+  res.json({
+    gnani: !!process.env.GNANI_API_KEY,
+    llm: !!process.env.LLM_API_KEY, llmModel: process.env.LLM_MODEL || "gemini-3.5-flash-lite",
+    telegramToken: !!process.env.TELEGRAM_BOT_TOKEN, telegramOnline: !!tg.online,
+    limits: { maxMinutes: 5, maxMB: 200 },
+  });
 });
 
 // ---------- Telegram (status is read from work/telegram.json, which the bot will write) ----------

@@ -143,9 +143,9 @@ export default function App() {
           </div>
         )}
 
-        {page === "library" && <Library onOpen={open} currentId={jobId} />}
+        {page === "library" && <Library onOpen={open} currentId={jobId} onNew={newDub} />}
         {page === "bot" && <BotPage tg={tg} />}
-        {page === "settings" && <Settings job={job} name={name} setName={setName} onChanged={refresh} onError={setErr} />}
+        {page === "settings" && <Settings job={job} name={name} setName={setName} onChanged={refresh} onError={setErr} onNew={newDub} />}
 
         {page === "studio" && (
           <>
