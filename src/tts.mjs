@@ -10,6 +10,7 @@ export async function tts(text, code, voice = "Shivani") {
   for (let attempt = 1; ; attempt++) {
     const res = await fetch("https://api.vachana.ai/api/v1/tts/inference", {
       method: "POST",
+      signal: AbortSignal.timeout(60000),
       headers: { "Content-Type": "application/json", "X-API-Key-ID": key },
       body: JSON.stringify({
         text,

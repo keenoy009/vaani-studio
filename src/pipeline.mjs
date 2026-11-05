@@ -34,7 +34,7 @@ async function gnani(method, path, opts = {}) {
   const key = process.env.GNANI_API_KEY;
   if (!key) throw new Error("GNANI_API_KEY missing in .env");
   for (let attempt = 1; ; attempt++) {
-    const res = await fetch(BASE + path, { method, ...opts, headers: { "X-API-Key-ID": key, ...(opts.headers ?? {}) } });
+    const res = await fetch(BASE + path, { method, signal: AbortSignal.timeout(60000), ...opts, headers: { "X-API-Key-ID": key, ...(opts.headers ?? {}) } });
     const text = await res.text();
     if (res.status === 429 && attempt < 6) { await sleep(10000 * attempt); continue; }
     if (!res.ok) throw new Error(`${method} ${path} -> ${res.status}: ${text}`);
@@ -106,6 +106,12 @@ export async function translate(segments, targetKey, sourceKey = "hi") {
   throw new Error(`LLM kept returning the wrong script for ${t.name}`);
 }
 
+/** Ask the LLM for a shorter version of a line (does NOT apply it). */
+export async function suggestShorter(line, targetKey) {
+  const slot = line.end - line.start;
+  return shorten(line, slot, TARGETS[targetKey]);
+}
+
 async function shorten(line, slot, target) {
   const targetChars = Math.floor(line.text.length * ((slot * 1.1) / line.tts_seconds));
   const system =
@@ -115,14 +121,14 @@ async function shorten(line, slot, target) {
 }
 
 /** Speak one line and time-fit it. Mutates and returns the line. onlyIfNeeded skips TTS if audio is current. */
-export async function voiceLine(line, targetKey, dir, voice = "Shivani") {
+export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoShorten = true } = {}) {
   const t = TARGETS[targetKey];
   const slot = line.end - line.start;
   const raw = join(dir, `tts_${line.id}.wav`);
   await writeFile(raw, await tts(line.text, t.code, voice));
   line.tts_seconds = +duration(raw).toFixed(2);
 
-  for (let tries = 1; tries <= 3 && line.tts_seconds / slot > MAX_RATIO_BEFORE_TEMPO; tries++) {
+  for (let tries = 1; autoShorten && tries <= 3 && line.tts_seconds / slot > MAX_RATIO_BEFORE_TEMPO; tries++) {
     const shorter = await shorten({ ...line, tts_file: raw }, slot, t);
     if (!shorter || !inRightScript(shorter, t) || shorter.length >= line.text.length) continue;
     line.text = shorter;

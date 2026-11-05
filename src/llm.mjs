@@ -10,6 +10,7 @@ async function geminiJson(system, user) {
   for (let attempt = 1; ; attempt++) {
     const res = await fetch(url, {
       method: "POST",
+      signal: AbortSignal.timeout(60000),
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: system }] },
