@@ -1,0 +1,575 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dubbing Studio</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Devanagari:wght@400;500;600&family=Noto+Sans+Kannada:wght@400;500;600&family=Noto+Sans+Tamil:wght@400;500;600&family=Noto+Sans+Telugu:wght@400;500;600&display=swap">
+<style>
+body{margin:0;background:#07080C}
+button{font-family:inherit;transition:filter .15s,background .15s,transform .15s}
+button:hover:not(:disabled){filter:brightness(1.12)}
+button:active:not(:disabled){transform:scale(.98)}
+button:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid #CFC7FF;outline-offset:2px}
+textarea{font-family:inherit}
+.wv{display:flex;align-items:center;gap:3px;height:38px}
+.wv i{display:block;width:4px;border-radius:2px;background:currentColor;opacity:.35}
+.wv.on i{opacity:1;animation:wv .8s ease-in-out infinite alternate}
+@keyframes wv{from{transform:scaleY(.35)}to{transform:scaleY(1)}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(169,155,255,.55)}100%{box-shadow:0 0 0 10px rgba(169,155,255,0)}}
+.pulse{animation:pulse 1.2s ease-out infinite}
+.seek:hover{background:rgba(255,255,255,.05)!important}
+</style>
+</helmet>
+
+<div style="display: flex; flex-wrap: wrap; width: 100%; min-height: 1240px; box-sizing: border-box; background: #07080C; color: #F1F3FA; font-family: 'Plus Jakarta Sans','Noto Sans Devanagari','Noto Sans Kannada','Noto Sans Tamil','Noto Sans Telugu',system-ui,sans-serif">
+
+<aside style="flex: 1 1 92px; max-width: 92px; box-sizing: border-box; padding: 28px 0; display: flex; flex-direction: column; align-items: center; gap: 14px; border-right: 1px solid #151824">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 8px; margin-bottom: 18px">
+<div style="width: 42px; height: 42px; border-radius: 14px; background: linear-gradient(145deg,#8B7BFF,#C8BFFF); display: flex; align-items: center; justify-content: center">
+<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #0B0A18; stroke-width: 2.6; stroke-linecap: round"><path d="M5 9v6M9.5 5v14M14.5 8v8M19 10.5v3"/></svg>
+</div>
+<span style="font-size: 10px; font-weight: 700; letter-spacing: 0.14em; color: #9AA3B8">VAANI</span>
+</div>
+<button type="button" aria-label="Studio" aria-current="page" style="width: 52px; height: 52px; border: 0; border-radius: 26px; background: #FFA6E7; color: #1B0B17; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round"><path d="M4 12h2M8 8v8M12 4v16M16 8v8M20 12h-2"/></svg>
+</button>
+<button type="button" aria-label="Library" style="width: 52px; height: 52px; border: 0; border-radius: 26px; background: transparent; color: #8A93A8; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>
+</button>
+<button type="button" aria-label="Telegram bot" style="width: 52px; height: 52px; border: 0; border-radius: 26px; background: transparent; color: #8A93A8; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M21 3 10 14M21 3l-7 18-4-7-7-4z"/></svg>
+</button>
+<button type="button" aria-label="Settings" style="width: 52px; height: 52px; border: 0; border-radius: 26px; background: transparent; color: #8A93A8; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M14 4v4M8 10v4M16 16v4"/></svg>
+</button>
+</aside>
+
+<div style="flex: 999 1 600px; min-width: 0; box-sizing: border-box; padding: 28px 32px 40px; display: flex; flex-direction: column; gap: 24px">
+
+<header style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<h1 style="margin: 0; font-size: 36px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1">Dubbing Studio</h1>
+<span style="font-size: 14px; color: #9AA3B8">Health video · Hindi · 2 speakers</span>
+</div>
+<div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap">
+<span style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-radius: 22px; background: #101219; border: 1px solid #1E2232; font-size: 13px; color: #9AA8B8"><span style="width: 8px; height: 8px; border-radius: 4px; background: #6EE7B7"></span><span style="font-family: 'JetBrains Mono',monospace; color: #F1F3FA">3,420</span> credits</span>
+<button type="button" onClick="{{newDub}}" style="display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 22px; border: 0; border-radius: 22px; background: #A99BFF; color: #0B0A18; font-size: 14px; font-weight: 700; cursor: pointer">
+<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round"><path d="M12 5v14M5 12h14"/></svg>
+New dub
+</button>
+<div role="img" aria-label="Your profile" style="width: 44px; height: 44px; border-radius: 22px; background: linear-gradient(145deg,#FFA6E7,#A99BFF); color: #1B0B17; font-size: 15px; font-weight: 800; display: flex; align-items: center; justify-content: center">K</div>
+</div>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+<div style="flex: 999 1 620px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+
+<section style="border: 1px solid #1E2232; border-radius: 28px; background: #101219; padding: 14px; display: flex; flex-direction: column; gap: 14px">
+
+<sc-if value="{{isReady}}" hint-placeholder-val="{{ true }}">
+<div style="position: relative; height: 360px; border-radius: 22px; overflow: hidden; background: radial-gradient(520px 300px at 15% 0%, rgba(139,123,255,0.42), transparent 62%), radial-gradient(520px 320px at 92% 100%, rgba(255,166,231,0.30), transparent 62%), #12142A">
+<div style="position: absolute; top: 16px; left: 16px; right: 16px; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+<span style="display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px; border-radius: 18px; background: rgba(7,8,12,0.62); border: 1px solid rgba(255,255,255,0.12); font-size: 13px; font-weight: 600"><span style="width: 8px; height: 8px; border-radius: 4px; background: #FFA6E7"></span>{{heroLabel}}</span>
+<div role="group" aria-label="Playback version" style="display: flex; padding: 4px; border-radius: 20px; background: rgba(7,8,12,0.62); border: 1px solid rgba(255,255,255,0.12)">
+<button type="button" aria-pressed="{{origPressed}}" onClick="{{setOrig}}" style="height: 32px; padding: 0 16px; border: 0; border-radius: 16px; font-size: 13px; font-weight: 600; cursor: pointer; background: {{origBg}}; color: {{origFg}}">Original</button>
+<button type="button" aria-pressed="{{dubPressed}}" onClick="{{setDub}}" style="height: 32px; padding: 0 16px; border: 0; border-radius: 16px; font-size: 13px; font-weight: 600; cursor: pointer; background: {{dubBg}}; color: {{dubFg}}">Dubbed</button>
+</div>
+</div>
+
+<div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; gap: 88px; padding-bottom: 76px; flex-wrap: wrap">
+<sc-for list="{{speakers}}" as="sp" hint-placeholder-count="2">
+<div style="display: flex; flex-direction: column; align-items: center; gap: 12px; transition: all .3s; transform: scale({{sp.scale}}); opacity: {{sp.opacity}}">
+<div style="width: 104px; height: 104px; border-radius: 52px; display: flex; align-items: center; justify-content: center; font-size: 28px; font-weight: 800; color: #0B0A18; transition: box-shadow .3s; background: {{sp.orbBg}}; box-shadow: {{sp.glow}}">{{sp.initials}}</div>
+<div class="wv {{sp.cls}}" style="color: {{sp.color}}">
+<sc-for list="{{sp.bars}}" as="b" hint-placeholder-count="14">
+<i style="height: {{b.h}}; animation-delay: {{b.d}}"></i>
+</sc-for>
+</div>
+<span style="font-size: 13px; font-weight: 600; color: #C9CFE0">{{sp.name}}</span>
+</div>
+</sc-for>
+</div>
+
+<div style="position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 2; padding: 14px 20px; border-radius: 18px; background: rgba(7,8,12,0.72); border: 1px solid rgba(255,255,255,0.10); text-align: center; font-size: 22px; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em">{{subtitle}}</div>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 0 6px">
+<button type="button" aria-label="Play or pause" onClick="{{togglePlay}}" style="width: 52px; height: 52px; border: 0; border-radius: 26px; background: #F1F3FA; color: #0B0A18; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+<sc-if value="{{isPaused}}" hint-placeholder-val="{{ true }}">
+<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor; stroke: none"><path d="M7 4.5v15l13-7.5z"/></svg>
+</sc-if>
+<sc-if value="{{isPlaying}}" hint-placeholder-val="{{ false }}">
+<svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor; stroke: none"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+</sc-if>
+</button>
+<span style="font-family: 'JetBrains Mono',monospace; font-size: 14px; color: #9AA3B8"><span style="color: #F1F3FA">{{timeNow}}</span> / 00:16</span>
+<span style="flex: 1 1 0"></span>
+<span style="display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 17px; background: rgba(110,231,183,0.10); border: 1px solid rgba(110,231,183,0.28); color: #6EE7B7; font-size: 12px; font-weight: 600">
+<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+Each speaker keeps their own voice
+</span>
+</div>
+
+<div style="padding: 0 6px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+<div style="display: flex; align-items: center; gap: 16px; font-size: 13px; color: #9AA3B8">
+<span style="font-weight: 700; color: #F1F3FA; font-size: 15px">Timing match</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #A99BFF"></span>Original</span>
+<span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #FFA6E7"></span>Dubbed</span>
+</div>
+<div role="tablist" aria-label="Chart view" style="display: flex; gap: 18px">
+<sc-for list="{{chartTabs}}" as="c" hint-placeholder-count="3">
+<button type="button" role="tab" aria-selected="{{c.selected}}" onClick="{{c.pick}}" style="padding: 4px 0; border: 0; border-bottom: 2px solid {{c.line}}; background: transparent; cursor: pointer; font-size: 13px; font-weight: 600; color: {{c.fg}}">{{c.label}}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="position: relative; height: 124px; border-radius: 16px; background: #0C0E15; overflow: hidden">
+<svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%">
+<defs>
+<linearGradient id="dubfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#FFA6E7" stop-opacity="0.34"/><stop offset="100%" stop-color="#FFA6E7" stop-opacity="0"/></linearGradient>
+<linearGradient id="origfill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#A99BFF" stop-opacity="0.26"/><stop offset="100%" stop-color="#A99BFF" stop-opacity="0"/></linearGradient>
+</defs>
+<path d="{{origArea}}" fill="url(#origfill)" opacity="{{origOp}}"/>
+<path d="{{dubArea}}" fill="url(#dubfill)" opacity="{{dubOp}}"/>
+<path d="{{origPath}}" fill="none" stroke="#A99BFF" stroke-width="2.4" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="{{origOp}}"/>
+<path d="{{dubPath}}" fill="none" stroke="#FFA6E7" stroke-width="2.4" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity="{{dubOp}}"/>
+</svg>
+<div style="position: absolute; top: 0; bottom: 0; left: 25%; width: 1px; background: rgba(255,255,255,0.07)"></div>
+<div style="position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: rgba(255,255,255,0.07)"></div>
+<div style="position: absolute; top: 0; bottom: 0; left: 75%; width: 1px; background: rgba(255,255,255,0.07)"></div>
+<sc-for list="{{origDots}}" as="d" hint-placeholder-count="5">
+<div style="position: absolute; width: 10px; height: 10px; border-radius: 5px; background: #A99BFF; border: 2px solid #0C0E15; box-sizing: border-box; transform: translate(-50%,-50%); left: {{d.left}}; top: {{d.top}}; opacity: {{origOp}}"></div>
+</sc-for>
+<sc-for list="{{dubDots}}" as="d" hint-placeholder-count="5">
+<div style="position: absolute; width: 10px; height: 10px; border-radius: 5px; background: #FFA6E7; border: 2px solid #0C0E15; box-sizing: border-box; transform: translate(-50%,-50%); left: {{d.left}}; top: {{d.top}}; opacity: {{dubOp}}"></div>
+</sc-for>
+<div style="position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #F1F3FA; border-radius: 1px; left: {{playLeft}}"></div>
+<sc-for list="{{seekZones}}" as="z" hint-placeholder-count="4">
+<button type="button" class="seek" aria-label="{{z.label}}" onClick="{{z.go}}" style="position: absolute; top: 0; bottom: 0; width: 25%; border: 0; padding: 0; cursor: pointer; left: {{z.left}}; background: {{z.bg}}"></button>
+</sc-for>
+</div>
+<div style="display: flex; justify-content: space-between; font-family: 'JetBrains Mono',monospace; font-size: 11px; color: #8A93A8"><span>0s</span><span>4s</span><span>8s</span><span>12s</span><span>16s</span></div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 2px 2px">
+<sc-for list="{{langChips}}" as="l" hint-placeholder-count="4">
+<button type="button" aria-pressed="{{l.pressed}}" onClick="{{l.pick}}" style="display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 14px 16px; border-radius: 18px; cursor: pointer; color: #F1F3FA; border: 1px solid {{l.border}}; background: {{l.bg}}">
+<span style="font-size: 20px; font-weight: 700">{{l.native}}</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9AA3B8"><span style="width: 6px; height: 6px; border-radius: 3px; background: #6EE7B7"></span>{{l.name}} · Ready</span>
+</button>
+</sc-for>
+</div>
+</sc-if>
+
+<sc-if value="{{isUpload}}" hint-placeholder-val="{{ false }}">
+<div style="min-height: 560px; border: 1.5px dashed #343A55; border-radius: 22px; background: radial-gradient(480px 260px at 50% 0%, rgba(139,123,255,0.20), transparent 70%), #0C0E15; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; padding: 32px; text-align: center">
+<div style="width: 72px; height: 72px; border-radius: 24px; background: rgba(169,155,255,0.14); border: 1px solid rgba(169,155,255,0.32); display: flex; align-items: center; justify-content: center">
+<svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #A99BFF; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14"/></svg>
+</div>
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 30px; font-weight: 800; letter-spacing: -0.02em">Drop your video here</span>
+<span style="font-size: 14px; color: #9AA3B8">Hindi or English · up to 60 seconds · MP4, MOV, MP3, WAV</span>
+</div>
+<div style="display: flex; gap: 12px; flex-wrap: wrap; justify-content: center">
+<button type="button" style="height: 48px; padding: 0 24px; border-radius: 24px; border: 1px solid #343A55; background: transparent; color: #F1F3FA; font-size: 14px; font-weight: 600; cursor: pointer">Browse files</button>
+<button type="button" onClick="{{startProc}}" style="height: 48px; padding: 0 28px; border-radius: 24px; border: 0; background: #A99BFF; color: #0B0A18; font-size: 14px; font-weight: 700; cursor: pointer">Use sample video</button>
+</div>
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 8px">
+<span style="font-size: 13px; color: #9AA3B8">Dubs into</span>
+<sc-for list="{{langChips}}" as="l" hint-placeholder-count="4">
+<span style="height: 30px; padding: 0 14px; border-radius: 15px; background: #171A25; border: 1px solid #262B40; display: inline-flex; align-items: center; font-size: 13px; font-weight: 600">{{l.native}}</span>
+</sc-for>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{isProcessing}}" hint-placeholder-val="{{ false }}">
+<div style="min-height: 560px; border-radius: 22px; background: radial-gradient(480px 260px at 20% 0%, rgba(139,123,255,0.22), transparent 70%), #0C0E15; padding: 32px; display: flex; flex-direction: column; gap: 28px">
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<span style="font-size: 13px; font-weight: 600; color: #A99BFF">Dubbing in progress</span>
+<span style="font-size: 26px; font-weight: 800; letter-spacing: -0.02em">{{stageText}}</span>
+</div>
+<span style="font-family: 'JetBrains Mono',monospace; font-size: 56px; font-weight: 500; letter-spacing: -0.04em; line-height: 1">{{pctText}}</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{steps}}" as="st" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 16px; background: #131622; border: 1px solid {{st.border}}">
+<span class="{{st.cls}}" style="flex: 0 0 auto; width: 22px; height: 22px; border-radius: 11px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; background: {{st.dotBg}}; border: 2px solid {{st.dotBorder}}">
+<sc-if value="{{st.done}}" hint-placeholder-val="{{ false }}">
+<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: #0B0A18; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+</sc-if>
+</span>
+<span style="font-size: 14px; font-weight: 600; color: {{st.fg}}">{{st.name}}</span>
+</div>
+</sc-for>
+</div>
+<div style="display: flex; flex-direction: column; gap: 16px">
+<sc-for list="{{langProg}}" as="p" hint-placeholder-count="4">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; justify-content: space-between; align-items: baseline">
+<span style="font-size: 16px; font-weight: 700">{{p.native}} <span style="font-size: 13px; font-weight: 500; color: #9AA3B8">{{p.name}}</span></span>
+<span style="font-family: 'JetBrains Mono',monospace; font-size: 13px; color: {{p.labelColor}}">{{p.label}}</span>
+</div>
+<div style="height: 8px; border-radius: 4px; background: #1E2232"><div style="height: 8px; border-radius: 4px; background: linear-gradient(90deg,#A99BFF,#FFA6E7); transition: width .2s; width: {{p.w}}"></div></div>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</section>
+
+<section style="border: 1px solid #1E2232; border-radius: 28px; background: #101219; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px">
+<span style="font-size: 20px; font-weight: 800; letter-spacing: -0.02em">Review the lines</span>
+<span style="display: inline-flex; align-items: center; height: 32px; padding: 0 14px; border-radius: 16px; font-size: 13px; font-weight: 700; background: {{apChipBg}}; color: {{apChipFg}}">{{apCount}} of 4 approved</span>
+</div>
+<div style="display: flex; flex-direction: column; gap: 10px">
+<sc-for list="{{lines}}" as="l" hint-placeholder-count="4">
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 18px; transition: background .2s, border-color .2s; border: 1px solid {{l.border}}; background: {{l.bg}}">
+<button type="button" aria-label="{{l.seekLabel}}" onClick="{{l.seek}}" style="flex: 0 0 auto; width: 40px; height: 40px; border: 0; border-radius: 20px; background: #1E2232; color: #F1F3FA; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0">
+<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="fill: currentColor; stroke: none"><path d="M7 4.5v15l13-7.5z"/></svg>
+</button>
+<div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+<div style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #9AA3B8"><span style="width: 8px; height: 8px; border-radius: 4px; background: {{l.dot}}"></span>{{l.speaker}} · <span style="font-family: 'JetBrains Mono',monospace">{{l.time}}</span></div>
+<div style="font-size: 13px; color: #8A93A8">{{l.src}}</div>
+<sc-if value="{{l.notEditing}}" hint-placeholder-val="{{ true }}">
+<div style="font-size: 18px; font-weight: 600; line-height: 1.4">{{l.dst}}</div>
+</sc-if>
+<sc-if value="{{l.editing}}" hint-placeholder-val="{{ false }}">
+<textarea rows="2" value="{{l.dst}}" onChange="{{l.onChange}}" aria-label="Edit translation for line {{l.num}}" style="resize: none; box-sizing: border-box; width: 100%; padding: 10px 12px; border-radius: 12px; border: 1px solid #A99BFF; background: #0C0E15; color: #F1F3FA; font-size: 17px; font-weight: 600; line-height: 1.4"></textarea>
+</sc-if>
+</div>
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<button type="button" onClick="{{l.toggleEdit}}" style="height: 38px; padding: 0 16px; border-radius: 19px; border: 1px solid #2C3247; background: transparent; color: #F1F3FA; font-size: 13px; font-weight: 600; cursor: pointer">{{l.editLabel}}</button>
+<button type="button" aria-pressed="{{l.pressed}}" onClick="{{l.toggleAp}}" style="display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: 19px; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid {{l.apBorder}}; background: {{l.apBg}}; color: {{l.apColor}}">
+<sc-if value="{{l.approved}}" hint-placeholder-val="{{ false }}">
+<svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true" style="fill: none; stroke: currentColor; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+</sc-if>
+{{l.apLabel}}
+</button>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</div>
+
+<aside style="flex: 1 1 380px; max-width: 420px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+
+<section style="border: 1px solid #1E2232; border-radius: 28px; background: #101219; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+<span style="font-size: 20px; font-weight: 800; letter-spacing: -0.02em">Send on Telegram</span>
+<span style="display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 14px; background: rgba(110,231,183,0.10); color: #6EE7B7; font-size: 12px; font-weight: 700"><span style="width: 6px; height: 6px; border-radius: 3px; background: #6EE7B7"></span>Bot online</span>
+</div>
+
+<div style="display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: 20px; background: #A99BFF; color: #0B0A18">
+<div style="flex: 0 0 auto; width: 46px; height: 46px; border-radius: 23px; background: rgba(11,10,24,0.14); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800">HW</div>
+<div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+<span style="font-size: 15px; font-weight: 800">Health workers, Tumakuru</span>
+<span style="font-size: 13px; font-weight: 500; opacity: 0.8">48 members · {{curName}}</span>
+</div>
+</div>
+
+<button type="button" disabled="{{sendDisabled}}" onClick="{{sendNow}}" style="height: 52px; border: 0; border-radius: 26px; font-size: 14px; font-weight: 700; cursor: {{sendCursor}}; background: {{sendBg}}; color: {{sendFg}}">{{sendLabel}}</button>
+
+<div style="display: flex; flex-direction: column; gap: 4px; padding-top: 4px">
+<span style="font-size: 13px; font-weight: 700; color: #9AA3B8; margin-bottom: 6px">Viewers sending videos to the bot</span>
+<sc-for list="{{viewers}}" as="v" hint-placeholder-count="3">
+<div style="display: flex; align-items: center; gap: 12px; padding: 10px 0">
+<div style="flex: 0 0 auto; width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 800; color: #14131F; background: {{v.bg}}">{{v.initial}}</div>
+<div style="display: flex; flex-direction: column; gap: 2px; flex: 1 1 0; min-width: 0">
+<span style="font-size: 14px; font-weight: 700">{{v.name}}</span>
+<span style="font-size: 13px; color: #9AA3B8">{{v.what}}</span>
+</div>
+<span style="height: 24px; padding: 0 10px; border-radius: 12px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; background: {{v.chipBg}}; color: {{v.chipFg}}">{{v.state}}</span>
+</div>
+</sc-for>
+</div>
+</section>
+
+<section style="border: 1px solid #1E2232; border-radius: 28px; background: #101219; padding: 22px; display: flex; flex-direction: column; gap: 16px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px">
+<span style="font-size: 20px; font-weight: 800; letter-spacing: -0.02em">Post your demo</span>
+<div role="tablist" aria-label="Platform" style="display: flex; padding: 4px; border-radius: 20px; background: #171A25">
+<sc-for list="{{postTabs}}" as="p" hint-placeholder-count="2">
+<button type="button" role="tab" aria-selected="{{p.selected}}" onClick="{{p.pick}}" style="height: 30px; padding: 0 16px; border: 0; border-radius: 15px; font-size: 13px; font-weight: 700; cursor: pointer; background: {{p.bg}}; color: {{p.fg}}">{{p.label}}</button>
+</sc-for>
+</div>
+</div>
+
+<div style="padding: 16px; border-radius: 18px; background: #0C0E15; border: 1px solid #1E2232; font-size: 14px; line-height: 1.6; color: #D8DCEA; white-space: pre-line">{{postText}}</div>
+
+<div style="display: flex; gap: 10px; flex-wrap: wrap">
+<button type="button" onClick="{{copyPost}}" style="flex: 1 1 140px; height: 48px; border: 0; border-radius: 24px; background: #FFA6E7; color: #1B0B17; font-size: 14px; font-weight: 700; cursor: pointer">{{copyLabel}}</button>
+<button type="button" style="flex: 1 1 140px; height: 48px; border-radius: 24px; border: 1px solid #2C3247; background: transparent; color: #F1F3FA; font-size: 14px; font-weight: 700; cursor: pointer">Export 60s clip</button>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 4px; padding-top: 6px; border-top: 1px solid #1E2232">
+<span style="font-size: 13px; font-weight: 700; color: #9AA3B8; padding: 10px 0 4px">Before you submit</span>
+<label style="display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 14px; cursor: pointer"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #A99BFF; margin: 0">Post is live on X or LinkedIn</label>
+<label style="display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 14px; cursor: pointer"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #A99BFF; margin: 0">Gnani AI tagged, both hashtags added</label>
+<label style="display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 14px; cursor: pointer"><input type="checkbox" style="width: 18px; height: 18px; accent-color: #A99BFF; margin: 0">Demo video attached to the post</label>
+</div>
+</section>
+
+</aside>
+</div>
+</div>
+</div>
+</x-dc>
+
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {
+  state = {
+    view: 'ready', lang: 'kn', mode: 'dub', playing: false, t: 0, pct: 0,
+    editing: null, edits: {}, approved: {}, sent: {}, chart: 'both', post: 'x', copied: false
+  };
+
+  componentDidMount() {
+    this._iv = setInterval(() => this.tick(), 200);
+  }
+
+  componentWillUnmount() {
+    clearInterval(this._iv);
+  }
+
+  tick() {
+    const s = this.state;
+    if (s.view === 'processing') {
+      const pct = Math.min(100, s.pct + 2);
+      if (pct >= 100) { this.setState({ pct: 100, view: 'ready', t: 0, playing: false }); }
+      else { this.setState({ pct }); }
+    } else if (s.view === 'ready' && s.playing) {
+      const t = s.t + 0.2;
+      if (t >= 16) { this.setState({ t: 0, playing: false }); }
+      else { this.setState({ t }); }
+    }
+  }
+
+  data() {
+    return {
+      SRC: [
+        'खाना खाने से पहले हाथ साबुन से धोएं।',
+        'कम से कम बीस सेकंड तक हाथ रगड़ें।',
+        'बच्चों को भी यही आदत सिखाएं।',
+        'ज़्यादा जानकारी के लिए आशा दीदी से मिलें।'
+      ],
+      DST: {
+        kn: ['ಊಟಕ್ಕೆ ಮೊದಲು ಕೈಗಳನ್ನು ಸೋಪಿನಿಂದ ತೊಳೆಯಿರಿ.', 'ಕನಿಷ್ಠ ಇಪ್ಪತ್ತು ಸೆಕೆಂಡ್ ಕೈಗಳನ್ನು ಉಜ್ಜಿ.', 'ಮಕ್ಕಳಿಗೂ ಇದೇ ಅಭ್ಯಾಸವನ್ನು ಕಲಿಸಿ.', 'ಹೆಚ್ಚಿನ ಮಾಹಿತಿಗಾಗಿ ಆಶಾ ಕಾರ್ಯಕರ್ತೆಯನ್ನು ಭೇಟಿಯಾಗಿ.'],
+        ta: ['சாப்பிடுவதற்கு முன் சோப்பால் கைகளைக் கழுவுங்கள்.', 'குறைந்தது இருபது விநாடிகள் கைகளைத் தேய்க்கவும்.', 'குழந்தைகளுக்கும் இதே பழக்கத்தைக் கற்றுக் கொடுங்கள்.', 'மேலும் தகவலுக்கு ஆஷா அக்காவைச் சந்தியுங்கள்.'],
+        te: ['భోజనం చేసే ముందు సబ్బుతో చేతులు కడుక్కోండి.', 'కనీసం ఇరవై సెకన్ల పాటు చేతులు రుద్దండి.', 'పిల్లలకు కూడా ఇదే అలవాటు నేర్పండి.', 'మరింత సమాచారం కోసం ఆశా కార్యకర్తను కలవండి.'],
+        mr: ['जेवणाआधी हात साबणाने धुवा.', 'किमान वीस सेकंद हात चोळा.', 'मुलांनाही हीच सवय लावा.', 'अधिक माहितीसाठी आशा ताईंना भेटा.']
+      },
+      SPK: [0, 1, 0, 1],
+      POST_X: 'Same video. Four Indian languages. Each speaker keeps their own voice.\n\nBuilt on @GnaniAi Prisma + Timbre for the Great Indian AI Internship Challenge.\n\n#GnaniAI #GreatIndianAIInternshipChallenge',
+      POST_IN: 'Most health videos are made in Hindi, but the people who need them speak Kannada, Tamil, Telugu and Marathi.\n\nI built Vaani Studio: upload a video, review the translation, and send the dubbed version to a Telegram group, with each speaker\'s own voice. It runs on Gnani AI\'s Prisma (speech-to-text) and Timbre (text-to-speech).\n\nBuilt for the Great Indian AI Internship Challenge.\n\n#GnaniAI #GreatIndianAIInternshipChallenge'
+    };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const D = this.data();
+    const LG = [
+      { id: 'kn', name: 'Kannada', native: 'ಕನ್ನಡ' },
+      { id: 'ta', name: 'Tamil', native: 'தமிழ்' },
+      { id: 'te', name: 'Telugu', native: 'తెలుగు' },
+      { id: 'mr', name: 'Marathi', native: 'मराठी' }
+    ];
+    const cur = LG.find(l => l.id === s.lang);
+    const seg = Math.min(3, Math.floor(s.t / 4));
+    const key = (lg, i) => lg + '-' + i;
+    const dst = (lg, i) => (s.edits[key(lg, i)] !== undefined ? s.edits[key(lg, i)] : D.DST[lg][i]);
+    const isAp = (lg, i) => (s.approved[key(lg, i)] !== undefined ? s.approved[key(lg, i)] : (lg === 'kn' && i < 3));
+    const fmt = (t) => { const n = Math.floor(t); return '00:' + (n < 10 ? '0' + n : n); };
+    const LAV = '#A99BFF', PINK = '#FFA6E7', MINT = '#6EE7B7';
+
+    const dubbed = s.mode === 'dub';
+    const heroLabel = dubbed ? 'Hindi → ' + cur.name : 'Hindi · Original';
+    const subtitle = dubbed ? dst(s.lang, seg) : D.SRC[seg];
+
+    const barH = [10, 18, 26, 14, 30, 20, 12, 28, 22, 16, 30, 12, 24, 14];
+    const activeSp = D.SPK[seg];
+    const speakers = [0, 1].map(i => {
+      const on = activeSp === i;
+      const c = i === 0 ? LAV : PINK;
+      return {
+        name: 'Speaker ' + (i + 1),
+        initials: 'S' + (i + 1),
+        cls: (on && s.playing) ? 'on' : '',
+        color: c,
+        orbBg: i === 0 ? 'linear-gradient(145deg,#7C6CFF,#C8BFFF)' : 'linear-gradient(145deg,#FF7ED8,#FFC2EE)',
+        glow: on ? (i === 0 ? '0 0 0 6px rgba(169,155,255,0.22), 0 0 60px rgba(169,155,255,0.45)' : '0 0 0 6px rgba(255,166,231,0.20), 0 0 60px rgba(255,166,231,0.40)') : 'none',
+        scale: on ? '1' : '0.86',
+        opacity: on ? '1' : '0.55',
+        bars: barH.map((h, j) => ({ h: h + 'px', d: (j * 0.07).toFixed(2) + 's' }))
+      };
+    });
+
+    const origV = [0.18, 0.35, 0.62, 0.8, 0.55, 0.3, 0.5, 0.72, 0.9, 0.68, 0.4, 0.35, 0.58, 0.78, 0.62, 0.38, 0.2];
+    const dubV = [0.2, 0.3, 0.58, 0.76, 0.6, 0.34, 0.46, 0.7, 0.86, 0.72, 0.44, 0.32, 0.55, 0.74, 0.66, 0.42, 0.22];
+    const toPts = (v) => v.map((y, i) => [+(i / 16 * 100).toFixed(2), +((1 - y) * 80 + 10).toFixed(2)]);
+    const smooth = (P) => {
+      let d = 'M' + P[0][0] + ',' + P[0][1];
+      for (let i = 0; i < P.length - 1; i++) {
+        const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2;
+        const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+        const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+        d += ' C' + c1x.toFixed(2) + ',' + c1y.toFixed(2) + ' ' + c2x.toFixed(2) + ',' + c2y.toFixed(2) + ' ' + p2[0] + ',' + p2[1];
+      }
+      return d;
+    };
+    const oP = toPts(origV), dP = toPts(dubV);
+    const origPath = smooth(oP), dubPath = smooth(dP);
+    const dotIdx = [0, 4, 8, 12, 16];
+    const dots = (P) => dotIdx.map(i => ({ left: P[i][0] + '%', top: P[i][1] + '%' }));
+    const showO = s.chart !== 'dub', showD = s.chart !== 'orig';
+    const chartTabs = [['both', 'Both'], ['orig', 'Original'], ['dub', 'Dubbed']].map(([id, label]) => ({
+      label,
+      selected: s.chart === id ? 'true' : 'false',
+      line: s.chart === id ? LAV : 'transparent',
+      fg: s.chart === id ? '#F1F3FA' : '#9AA3B8',
+      pick: () => this.setState({ chart: id })
+    }));
+    const seekZones = [0, 1, 2, 3].map(i => ({
+      left: (i * 25) + '%',
+      bg: seg === i ? 'rgba(169,155,255,0.10)' : 'transparent',
+      label: 'Jump to line ' + (i + 1),
+      go: () => this.setState({ t: i * 4 })
+    }));
+
+    const langChips = LG.map(l => ({
+      native: l.native, name: l.name,
+      pressed: s.lang === l.id ? 'true' : 'false',
+      border: s.lang === l.id ? LAV : '#1E2232',
+      bg: s.lang === l.id ? 'rgba(169,155,255,0.14)' : '#141722',
+      pick: () => this.setState({ lang: l.id, editing: null })
+    }));
+
+    const lines = [0, 1, 2, 3].map(i => {
+      const active = seg === i;
+      const editing = s.editing === i;
+      const approved = isAp(s.lang, i);
+      return {
+        num: i + 1,
+        time: fmt(i * 4) + ' – ' + fmt(i * 4 + 4),
+        speaker: 'Speaker ' + (D.SPK[i] + 1),
+        dot: D.SPK[i] === 0 ? LAV : PINK,
+        src: D.SRC[i],
+        dst: dst(s.lang, i),
+        editing, notEditing: !editing, approved,
+        border: active ? LAV : '#1E2232',
+        bg: active ? 'rgba(169,155,255,0.08)' : '#141722',
+        editLabel: editing ? 'Done' : 'Edit',
+        apLabel: approved ? 'Approved' : 'Approve',
+        pressed: approved ? 'true' : 'false',
+        apBg: approved ? 'rgba(110,231,183,0.14)' : 'transparent',
+        apColor: approved ? MINT : '#F1F3FA',
+        apBorder: approved ? 'rgba(110,231,183,0.40)' : '#2C3247',
+        seekLabel: 'Play line ' + (i + 1),
+        seek: () => this.setState({ t: i * 4, playing: true }),
+        toggleEdit: () => this.setState({ editing: editing ? null : i }),
+        toggleAp: () => this.setState({ approved: { ...s.approved, [key(s.lang, i)]: !approved } }),
+        onChange: (e) => this.setState({
+          edits: { ...s.edits, [key(s.lang, i)]: e.target.value },
+          approved: { ...s.approved, [key(s.lang, i)]: false }
+        })
+      };
+    });
+    const apCount = lines.filter(l => l.approved).length;
+    const allAp = apCount === 4;
+    const sentNow = !!s.sent[s.lang];
+    const sendDisabled = !allAp || sentNow;
+    const sendLabel = sentNow ? 'Sent to 48 members' : (allAp ? 'Send ' + cur.name + ' dub to group' : 'Approve all lines to send (' + apCount + '/4)');
+
+    const viewers = [
+      { initial: 'M', name: 'Meena', what: 'Hindi video, wants Kannada', state: 'Delivered', bg: '#FFB68F', chipBg: 'rgba(110,231,183,0.12)', chipFg: MINT },
+      { initial: 'R', name: 'Ravi', what: 'Hindi video, wants Telugu', state: 'Dubbing', bg: '#6EE7B7', chipBg: 'rgba(169,155,255,0.16)', chipFg: LAV },
+      { initial: 'S', name: 'Salma', what: 'English video, wants Marathi', state: 'To approve', bg: LAV, chipBg: 'rgba(255,182,143,0.14)', chipFg: '#FFB68F' }
+    ];
+
+    const postTabs = [['x', 'X'], ['in', 'LinkedIn']].map(([id, label]) => ({
+      label,
+      selected: s.post === id ? 'true' : 'false',
+      bg: s.post === id ? '#F1F3FA' : 'transparent',
+      fg: s.post === id ? '#0B0A18' : '#9AA3B8',
+      pick: () => this.setState({ post: id, copied: false })
+    }));
+    const postText = s.post === 'x' ? D.POST_X : D.POST_IN;
+
+    const th = [25, 50, 80, 100];
+    const names = ['Transcribe', 'Translate', 'Voice', 'Mix'];
+    const pct = s.pct;
+    const steps = names.map((n, i) => {
+      const prev = i === 0 ? 0 : th[i - 1];
+      const done = pct >= th[i];
+      const active = !done && pct >= prev;
+      return {
+        name: n, done,
+        cls: active ? 'pulse' : '',
+        dotBg: done ? MINT : (active ? LAV : 'transparent'),
+        dotBorder: done ? MINT : (active ? LAV : '#343A55'),
+        border: active ? 'rgba(169,155,255,0.45)' : '#1E2232',
+        fg: (done || active) ? '#F1F3FA' : '#8A93A8'
+      };
+    });
+    const base = pct <= 25 ? 0 : Math.min(100, (pct - 25) * (100 / 75));
+    const langProg = LG.map((l, i) => {
+      const p = pct >= 100 ? 100 : Math.max(0, Math.min(100, base - i * 10));
+      return {
+        native: l.native, name: l.name, w: p + '%',
+        label: p >= 100 ? 'Done' : (p <= 0 ? 'Waiting' : Math.round(p) + '%'),
+        labelColor: p >= 100 ? MINT : '#9AA3B8'
+      };
+    });
+    const stageText = pct < 25 ? 'Listening and separating speakers' : (pct < 50 ? 'Translating every line' : (pct < 80 ? 'Generating the voices' : 'Fitting timing and mixing'));
+
+    return {
+      isReady: s.view === 'ready', isUpload: s.view === 'upload', isProcessing: s.view === 'processing',
+      heroLabel, subtitle, speakers,
+      origPressed: !dubbed ? 'true' : 'false', dubPressed: dubbed ? 'true' : 'false',
+      origBg: !dubbed ? '#F1F3FA' : 'transparent', origFg: !dubbed ? '#0B0A18' : '#C9CFE0',
+      dubBg: dubbed ? '#F1F3FA' : 'transparent', dubFg: dubbed ? '#0B0A18' : '#C9CFE0',
+      setOrig: () => this.setState({ mode: 'orig' }),
+      setDub: () => this.setState({ mode: 'dub' }),
+      isPlaying: s.playing, isPaused: !s.playing,
+      togglePlay: () => this.setState({ playing: !s.playing }),
+      timeNow: fmt(s.t),
+      chartTabs, origPath, dubPath,
+      origArea: origPath + ' L100,100 L0,100 Z', dubArea: dubPath + ' L100,100 L0,100 Z',
+      origOp: showO ? '1' : '0', dubOp: showD ? '1' : '0',
+      origDots: dots(oP), dubDots: dots(dP),
+      playLeft: (s.t / 16 * 100) + '%',
+      seekZones, langChips, lines, apCount,
+      apChipBg: allAp ? 'rgba(110,231,183,0.14)' : 'rgba(255,182,143,0.14)',
+      apChipFg: allAp ? MINT : '#FFB68F',
+      curName: cur.name,
+      sendDisabled, sendLabel,
+      sendCursor: sendDisabled ? 'not-allowed' : 'pointer',
+      sendBg: sentNow ? 'rgba(110,231,183,0.14)' : (allAp ? '#F1F3FA' : '#1E2232'),
+      sendFg: sentNow ? MINT : (allAp ? '#0B0A18' : '#8A93A8'),
+      sendNow: () => { if (allAp && !sentNow) this.setState({ sent: { ...s.sent, [s.lang]: true } }); },
+      viewers, postTabs, postText,
+      copyLabel: s.copied ? 'Copied' : 'Copy caption',
+      copyPost: () => {
+        try { navigator.clipboard.writeText(postText); } catch (e) {}
+        this.setState({ copied: true });
+        setTimeout(() => this.setState({ copied: false }), 1800);
+      },
+      newDub: () => this.setState({ view: 'upload', playing: false, t: 0, pct: 0, editing: null, approved: {}, edits: {}, sent: {} }),
+      startProc: () => this.setState({ view: 'processing', pct: 0 }),
+      steps, langProg, stageText, pctText: Math.round(pct) + '%'
+    };
+  }
+}
+</script>
+</body>
+</html>

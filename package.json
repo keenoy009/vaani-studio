@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env server/index.mjs"
+    "start": "node --env-file=.env server/index.mjs",
+    "client": "npm --prefix client run dev"
   },
   "engines": {
     "node": ">=20"

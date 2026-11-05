@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #07080c;
+  --color-panel: #101219;
+  --color-well: #0c0e15;
+  --color-line: #1e2232;
+  --color-lav: #a99bff;
+  --color-pink: #ffa6e7;
+  --color-peach: #ffb68f;
+  --color-mint: #6ee7b7;
+  --color-ink: #f1f3fa;
+  --color-mute: #9aa3b8;
+  --font-sans: "Plus Jakarta Sans", "Noto Sans Devanagari", "Noto Sans Kannada", "Noto Sans Tamil", "Noto Sans Telugu", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+body { margin: 0; background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); }
+button { font-family: inherit; transition: filter 0.15s, background 0.15s, transform 0.15s; cursor: pointer; }
+button:hover:not(:disabled) { filter: brightness(1.12); }
+button:active:not(:disabled) { transform: scale(0.98); }
+button:disabled { cursor: not-allowed; }
+button:focus-visible, textarea:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #cfc7ff; outline-offset: 2px; }
+textarea { font-family: inherit; }
+
+.wv { display: flex; align-items: center; gap: 3px; height: 30px; }
+.wv i { display: block; width: 4px; border-radius: 2px; background: currentColor; opacity: 0.35; }
+.wv.on i { opacity: 1; animation: wv 0.8s ease-in-out infinite alternate; }
+@keyframes wv { from { transform: scaleY(0.35); } to { transform: scaleY(1); } }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(169, 155, 255, 0.55); } 100% { box-shadow: 0 0 0 10px rgba(169, 155, 255, 0); } }
+.pulse { animation: pulse 1.2s ease-out infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
