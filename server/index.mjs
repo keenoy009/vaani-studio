@@ -275,8 +275,16 @@ async function makeSample(job) {
   await writeFile(join(dir, "list.txt"), list.join("\n"));
   const wav = join(dir, "sample.wav");
   execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", join(dir, "list.txt"), "-c", "copy", wav]);
-  execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "color=c=0x12142A:s=1280x720:r=25", "-i", wav, "-t", String(duration(wav)),
-    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", join(dir, job.videoFile)]);
+  // A purple gradient with a bar pattern (always visible) and a live sound-wave of the speech on top, so any frame of the
+  // sample, and therefore its Library thumbnail, looks like a proper poster.
+  const N = 28, GAP = 28, x0 = Math.round((1280 - N * GAP) / 2);
+  const boxes = Array.from({ length: N }, (_, i) => {
+    const h = Math.round(50 + 230 * Math.abs(Math.sin(i * 0.52 + 0.6)) * (0.55 + 0.45 * Math.sin(i * 0.23 + 1)));
+    return `drawbox=x=${x0 + i * GAP}:y=${360 - Math.round(h / 2)}:w=14:h=${h}:color=0xFFA6E7@0.55:t=fill`;
+  }).join(",");
+  const graph = `[0:v]${boxes}[bg];[1:a]aformat=channel_layouts=mono,volume=3,showwaves=s=1000x360:mode=cline:rate=25:scale=sqrt:colors=0xFFFFFF@0.9[w];[bg][w]overlay=(W-w)/2:(H-h)/2,format=yuv420p[v]`;
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "gradients=s=1280x720:c0=0x2B2559:c1=0x7A3A86:speed=0:r=25", "-i", wav,
+    "-filter_complex", graph, "-map", "[v]", "-map", "1:a", "-t", String(duration(wav)), "-c:v", "libx264", "-c:a", "aac", join(dir, job.videoFile)]);
 }
 
 app.post("/api/samples", async (req, res) => {
@@ -317,11 +325,18 @@ app.put("/api/jobs/:id/voices", async (req, res) => {
 // ---------- thumbnails (Library cards) ----------
 app.get("/api/jobs/:id/thumb", (req, res) => {
   const j = getJob(req, res); if (!j) return;
-  const out = join(jobDir(j.id), "thumb.jpg");
+  const src = join(jobDir(j.id), j.videoFile);
+  const out = join(jobDir(j.id), "thumb2.jpg");
   try {
-    if (!existsSync(out)) execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", "1", "-i", join(jobDir(j.id), j.videoFile), "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4", out]);
+    if (!existsSync(src)) throw new Error("video file is missing");
+    if (!existsSync(out)) {
+      // a frame from about a third of the way in is more representative than the very first second
+      const d = duration(src);
+      const at = Number.isFinite(d) && d > 1.5 ? Math.min(d * 0.35, d - 0.5) : 0.2;
+      execFileSync("ffmpeg", ["-y", "-v", "error", "-ss", at.toFixed(2), "-i", src, "-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "4", out]);
+    }
     res.sendFile(out);
-  } catch { res.status(404).json({ error: "No thumbnail" }); }
+  } catch { res.status(404).json({ error: "No thumbnail" }); } // the Library then shows its generated cover
 });
 
 // ---------- which services are configured (booleans only, never the keys) ----------

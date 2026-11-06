@@ -67,23 +67,16 @@ function Cover({ id, name }) {
   );
 }
 
-// Shows the video's first frame. If it fails to load, or the frame is basically one flat colour (like our made-up samples), show the generated cover.
+// Shows a real frame from the video (taken from the middle, by the server). The generated cover is
+// only used for a video that has no frame at all (file missing or unreadable), and while the image loads.
 function Thumb({ id, name }) {
   const [state, setState] = useState("loading"); // loading | photo | cover
-  const check = (e) => {
-    try {
-      const c = document.createElement("canvas"); c.width = 32; c.height = 18;
-      const x = c.getContext("2d"); x.drawImage(e.currentTarget, 0, 0, 32, 18);
-      const d = x.getImageData(0, 0, 32, 18).data;
-      let sum = 0, sq = 0, n = 0;
-      for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; sum += y; sq += y * y; n++; }
-      setState(Math.sqrt(Math.max(0, sq / n - (sum / n) ** 2)) < 6 ? "cover" : "photo");
-    } catch { setState("photo"); }
-  };
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-[#12142A]">
       {state !== "photo" && <Cover id={id} name={name} />}
-      {state !== "cover" && <img src={api.thumbUrl(id)} alt="" loading="lazy" onLoad={check} onError={() => setState("cover")} className={state === "photo" ? "absolute inset-0 h-full w-full object-cover" : "hidden"} />}
+      {/* Kept on the page (just transparent) while loading: browsers never download lazy images that are display:none. */}
+      {state !== "cover" && <img src={api.thumbUrl(id)} alt="" loading="lazy" onLoad={() => setState("photo")} onError={() => setState("cover")}
+        className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${state === "photo" ? "opacity-100" : "opacity-0"}`} />}
     </div>
   );
 }
