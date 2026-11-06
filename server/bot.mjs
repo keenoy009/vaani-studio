@@ -44,6 +44,16 @@ function upsertViewer(key, patch) {
   return saveState();
 }
 
+// ---------- voice choices ----------
+const VOICE_CHOICES = [["Shivani", "👩"], ["Lakshmi", "👩"], ["Riyaa", "👩"], ["Avinash", "👨"], ["Devansh", "👨"], ["Prakash", "👨"]];
+const VOICE_IDS = ["clone", "default", ...VOICE_CHOICES.map(([n]) => n)];
+const VOICE_NOTE = "Which voice should the dub use?\n\n“Match original voice” copies each speaker's real voice, so only choose it if you have the speakers' permission.";
+function voiceKeyboard(prefix) {
+  const kb = new InlineKeyboard().text("🎙 Match original voice (I have permission)", `${prefix}:clone`).row().text("Default voices", `${prefix}:default`).row();
+  VOICE_CHOICES.forEach(([name, icon], i) => { kb.text(`${icon} ${name}`, `${prefix}:${name}`); if (i % 3 === 2) kb.row(); });
+  return kb;
+}
+
 const STAGE_TEXT = { audio: "Extracting the audio", transcribe: "Listening and separating speakers", translate: "Translating each line", voice: "Recording the dubbed voices" };
 
 // ---------- the bot ----------
@@ -117,8 +127,9 @@ export function createBot({ token, apiBase, download, botInfo }) {
     const buf = Buffer.from(await r.arrayBuffer());
     const me = botUsername || (await api.getMe()).username;
     const kb = new InlineKeyboard()
-      .url("Share to group", `https://t.me/${me}?startgroup=share_${jobId}_${lang}`)
-      .text("Change language", `c:${jobId}`);
+      .url("Share to group", `https://t.me/${me}?startgroup=share_${jobId}_${lang}`).row()
+      .text("Change language", `c:${jobId}`)
+      .text("Change voice", `cv:${jobId}:${lang}`);
     await api.sendVideo(chatId, new InputFile(buf, `${title.replace(/[^\w-]+/g, "_").slice(0, 40) || "dub"}_${lang}.mp4`), {
       caption: `Dubbed into ${LANGS[lang][1]} (${LANGS[lang][0]})`, reply_markup: kb, supports_streaming: true,
     });
@@ -129,8 +140,10 @@ export function createBot({ token, apiBase, download, botInfo }) {
     let last = "";
     const tick = (t) => { const text = `⏳ ${t}…`; if (text !== last) { last = text; edit(api, chatId, statusMsgId, text); } };
     try {
-      await waitForDub(jobId, lang, tick);
+      const job = await waitForDub(jobId, lang, tick);
       await sendResult(api, chatId, jobId, lang, title);
+      const notes = job.langs[lang]?.cloneNotes ?? [];
+      if (notes.length) await api.sendMessage(chatId, `ℹ️ ${notes[0]}`).catch(() => {});
       await api.deleteMessage(chatId, statusMsgId).catch(() => {});
       await upsertViewer(viewerKey, { state: "Done" });
     } catch (e) {
@@ -140,7 +153,7 @@ export function createBot({ token, apiBase, download, botInfo }) {
   }
 
   // ----- commands -----
-  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.";
+  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.\n\nYou can pick the voice too, or have me match the original speaker's voice.";
   bot.command("start", async (ctx) => {
     const payload = ctx.match?.trim();
     const m = payload && /^share_([0-9a-f-]{36})_([a-z]{2})$/.exec(payload);
@@ -201,7 +214,7 @@ export function createBot({ token, apiBase, download, botInfo }) {
     });
   });
 
-  // ----- button: dub into -----
+  // ----- button: dub into -> ask which voice -----
   bot.callbackQuery(/^t:([0-9a-f]{8}):([a-z]{2})$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     const [, key, lang] = ctx.match;
@@ -209,9 +222,22 @@ export function createBot({ token, apiBase, download, botInfo }) {
     const chatId = ctx.callbackQuery.message.chat.id;
     const msgId = ctx.callbackQuery.message.message_id;
     if (!p || !p.source || !TARGETS.includes(lang) || lang === p.source) return edit(ctx.api, chatId, msgId, "This request has expired. Please send the video again.");
+    p.target = lang;
+    await edit(ctx.api, chatId, msgId, `${LANGS[p.source][1]} → ${LANGS[lang][1]}.\n\n${VOICE_NOTE}`, { reply_markup: voiceKeyboard(`v:${key}`) });
+  });
+
+  // ----- button: voice chosen -> start the dub -----
+  bot.callbackQuery(/^v:([0-9a-f]{8}):(\w+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const [, key, voice] = ctx.match;
+    const p = pending.get(key);
+    const chatId = ctx.callbackQuery.message.chat.id;
+    const msgId = ctx.callbackQuery.message.message_id;
+    if (!p || !p.source || !p.target || !VOICE_IDS.includes(voice)) return edit(ctx.api, chatId, msgId, "This request has expired. Please send the video again.");
     if (p.started) return; // double tap
     p.started = true;
-    const what = `${LANGS[p.source][1]} → ${LANGS[lang][1]}`;
+    const lang = p.target;
+    const what = `${LANGS[p.source][1]} → ${LANGS[lang][1]}${voice === "clone" ? " · original voice" : voice !== "default" ? ` · ${voice}` : ""}`;
     await upsertViewer(key, { name: p.userName, what, state: "Dubbing", at: new Date().toISOString() });
     await edit(ctx.api, chatId, msgId, "⏳ Getting your video…");
     try {
@@ -219,6 +245,8 @@ export function createBot({ token, apiBase, download, botInfo }) {
       const buf = await fetchDownload(file);
       const fd = new FormData();
       fd.append("source", p.source); fd.append("targets", lang);
+      if (voice !== "default") fd.append("voice", voice);
+      if (voice === "clone") fd.append("cloneConsent", "true"); // choosing "Match original voice (I have permission)" is the confirmation
       fd.append("video", new Blob([buf]), /\.(mp4|mov|mkv|webm|m4v)$/i.test(p.name) ? p.name : "video.mp4");
       const r = await fetch(`${apiBase}/api/jobs`, { method: "POST", body: fd, signal: AbortSignal.timeout(120000) });
       const job = await r.json().catch(() => ({}));
@@ -226,6 +254,35 @@ export function createBot({ token, apiBase, download, botInfo }) {
       await apiJson("PATCH", `/api/jobs/${job.id}`, { title: `Telegram · ${p.userName}` }).catch(() => {});
       pending.delete(key);
       await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId: job.id, lang, title: p.userName, viewerKey: key });
+    } catch (e) {
+      await edit(ctx.api, chatId, msgId, `😕 Sorry, that didn't work.\n${friendly(e)}`);
+      await upsertViewer(key, { state: "Failed" });
+    }
+  });
+
+  // ----- button: change voice (re-render the same dub with another voice) -----
+  bot.callbackQuery(/^cv:([0-9a-f-]{36}):([a-z]{2})$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const [, jobId, lang] = ctx.match;
+    await ctx.reply(VOICE_NOTE, { reply_markup: voiceKeyboard(`w:${jobId}:${lang}`) });
+  });
+  bot.callbackQuery(/^w:([0-9a-f-]{36}):([a-z]{2}):(\w+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const [, jobId, lang, voice] = ctx.match;
+    const chatId = ctx.callbackQuery.message.chat.id;
+    const msgId = ctx.callbackQuery.message.message_id;
+    const key = newKey();
+    try {
+      if (!TARGETS.includes(lang) || !VOICE_IDS.includes(voice)) throw new Error("bad choice");
+      await upsertViewer(key, { name: ctx.from?.first_name || "Someone", what: `new voice: ${voice === "clone" ? "original voice" : voice === "default" ? "default" : voice}`, state: "Dubbing", at: new Date().toISOString() });
+      await edit(ctx.api, chatId, msgId, "⏳ Applying the voice…");
+      const speakers = await apiJson("GET", `/api/jobs/${jobId}/voices`);
+      const body = {};
+      for (const s of speakers) body[s.speaker] = voice === "clone" ? (s.canClone ? "clone" : "default") : voice; // a speaker with too little speech keeps a studio voice
+      if (voice === "clone") body.cloneConsent = true; // the button says "I have permission"
+      await apiJson("PUT", `/api/jobs/${jobId}/voices`, body);
+      await apiJson("POST", `/api/jobs/${jobId}/langs/${lang}/render`);
+      await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId, lang, title: ctx.from?.first_name || "dub", viewerKey: key });
     } catch (e) {
       await edit(ctx.api, chatId, msgId, `😕 Sorry, that didn't work.\n${friendly(e)}`);
       await upsertViewer(key, { state: "Failed" });

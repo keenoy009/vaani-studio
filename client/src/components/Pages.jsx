@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, LANGS, SOURCES, displayName, fmt } from "../api.js";
 import { Viewers } from "./Telegram.jsx";
+import VoiceSelect from "./VoiceSelect.jsx";
 
 const card = "rounded-[28px] border border-line bg-panel p-6";
 const ORBS = ["linear-gradient(145deg,#7C6CFF,#C8BFFF)", "linear-gradient(145deg,#FF7ED8,#FFC2EE)", "linear-gradient(145deg,#FF9A63,#FFD0B3)", "linear-gradient(145deg,#38D9A0,#B5F5DC)"];
@@ -228,8 +229,8 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
   useEffect(() => { api.voices().then(setVoices).catch(() => {}); api.status().then(setStatus).catch(() => {}); }, []);
   useEffect(() => { if (job) api.jobVoices(job.id).then(setMine).catch(() => {}); else setMine([]); }, [job?.id]);
 
-  const change = async (speaker, voice) => {
-    try { setMine(await api.setVoices(job.id, { [speaker]: voice })); onChanged(); } catch (e) { onError(e.message); }
+  const change = async (speaker, voice, consent) => {
+    try { setMine(await api.setVoices(job.id, consent ? { [speaker]: voice, cloneConsent: true } : { [speaker]: voice })); onChanged(); } catch (e) { onError(e.message); }
   };
   const initial = (name.trim()[0] || "V").toUpperCase();
 
@@ -254,10 +255,7 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
                     <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full text-sm font-extrabold text-[#0B0A18]" style={{ background: ORBS[i % 4] }}>S{i + 1}</span>
                     <div className="flex flex-col"><span className="text-[15px] font-bold">{m.label}</span><span className="text-xs text-mute">{v ? `${v.gender} · ${v.persona}` : ""}</span></div>
                   </div>
-                  <select aria-label={`Voice for ${m.label}`} value={m.voice} onChange={(e) => change(m.speaker, e.target.value)}
-                    className="h-11 rounded-full border border-[#2C3247] bg-panel px-4 text-sm font-semibold text-ink">
-                    {voices.map((x) => <option key={x.name} value={x.name}>{x.name} · {x.gender}</option>)}
-                  </select>
+                  <VoiceSelect m={m} voices={voices} onChange={change} label={`Voice for ${m.label}`} />
                 </div>
               );
             })}

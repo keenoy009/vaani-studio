@@ -11,7 +11,7 @@ import { readFile, writeFile, readdir, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
 import { extractAudio, transcribe, translate, voiceLine, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
-import { duration, tts } from "../src/tts.mjs";
+import { duration, tts, createVoiceEmbedding } from "../src/tts.mjs";
 import { startBot, telegramState, sendDub } from "./bot.mjs";
 import { execFileSync } from "node:child_process";
 
@@ -30,7 +30,13 @@ const VOICE_LIST = [
 const VOICE_NAMES = new Set(VOICE_LIST.map((v) => v.name));
 const DEFAULT_ORDER = ["Shivani", "Avinash", "Lakshmi", "Devansh", "Riyaa", "Prakash"];
 const speakersOf = (job) => [...new Set(job.segments.map((s) => s.speaker))].sort((a, b) => a - b);
-const voiceFor = (job, speaker) => job.voices?.[speaker] ?? DEFAULT_ORDER[Math.max(0, speakersOf(job).indexOf(speaker)) % DEFAULT_ORDER.length];
+const defaultVoice = (job, speaker) => DEFAULT_ORDER[Math.max(0, speakersOf(job).indexOf(speaker)) % DEFAULT_ORDER.length];
+// A speaker's chosen voice: a preset name, or "clone" (match the original speaker). Falls back to the default rotation.
+const voiceFor = (job, speaker) => job.voices?.[speaker] ?? defaultVoice(job, speaker);
+
+// ---- voice cloning: needs 5-30 s of that speaker's own speech (Gnani's requirement) ----
+const MIN_CLONE_SECONDS = 5, MAX_CLONE_SECONDS = 28;
+const speechSeconds = (job, speaker) => job.segments.filter((s) => s.speaker === speaker).reduce((n, s) => n + (s.end - s.start), 0);
 const ALLOWED_EXT = new Set([".mp4", ".mov", ".mkv", ".webm", ".m4v"]);
 // Bump when the audio mix changes in a way that makes older rendered files wrong. v2 = original audio fully muted.
 const MIX_VERSION = 2;
@@ -55,6 +61,32 @@ for (const id of await readdir(JOBS_DIR)) {
 const jobDir = (id) => join(JOBS_DIR, id);
 const save = (job) => writeFile(join(jobDir(job.id), "job.json"), JSON.stringify(job, null, 2));
 const langDir = async (job, lang) => { const d = join(jobDir(job.id), TARGETS[lang].code); await mkdir(d, { recursive: true }); return d; };
+
+/** Reference clip (this speaker's own speech from the video's audio) -> Gnani voice embedding. Cached per speaker. null = not enough speech. */
+async function getEmbedding(job, speaker) {
+  const cache = join(jobDir(job.id), `voice_${speaker}.json`);
+  if (existsSync(cache)) return JSON.parse(await readFile(cache, "utf8"));
+  const picked = [];
+  let total = 0;
+  for (const s of job.segments.filter((x) => x.speaker === speaker && x.end - x.start >= 0.6)) {
+    if (total >= MAX_CLONE_SECONDS) break;
+    const d = Math.min(s.end - s.start, MAX_CLONE_SECONDS - total);
+    picked.push({ start: s.start, d }); total += d;
+  }
+  if (total < MIN_CLONE_SECONDS) return null;
+  const graph = picked.map((p, i) => `[0:a]atrim=start=${p.start.toFixed(2)}:duration=${p.d.toFixed(2)},asetpts=PTS-STARTPTS[a${i}]`).join(";")
+    + `;${picked.map((_, i) => `[a${i}]`).join("")}concat=n=${picked.length}:v=0:a=1[out]`;
+  const ref = join(jobDir(job.id), `ref_${speaker}.wav`);
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-i", join(jobDir(job.id), "audio.wav"), "-filter_complex", graph, "-map", "[out]", "-ac", "1", "-ar", "16000", ref]);
+  const emb = await createVoiceEmbedding(ref);
+  await writeFile(cache, JSON.stringify(emb));
+  return emb;
+}
+
+const voicesPayload = (job) => speakersOf(job).map((sp, i) => ({
+  speaker: sp, label: `Speaker ${i + 1}`, voice: voiceFor(job, sp),
+  speechSeconds: +speechSeconds(job, sp).toFixed(1), canClone: speechSeconds(job, sp) >= MIN_CLONE_SECONDS, consent: !!job.cloneConsent,
+}));
 
 // A job is a bag of lines per language; strip server-only file paths before sending to the browser.
 const publicLine = ({ fit_file, ...rest }) => rest;
@@ -87,6 +119,10 @@ async function runJob(job, targets) {
     await save(job);
     job.segments = await transcribe(audio, jobDir(job.id), job.source);
     if (!job.segments.length) throw new Error("No speech found in this video.");
+    if (job.voiceChoice) { // voice picked up front (e.g. from Telegram): apply it to every speaker
+      job.voices = {};
+      for (const sp of speakersOf(job)) if (job.voiceChoice !== "clone" || speechSeconds(job, sp) >= MIN_CLONE_SECONDS) job.voices[sp] = job.voiceChoice;
+    }
     job.stage = "translate";
     await save(job);
     for (const lang of targets) { job.stage = "translate"; await dubLang(job, lang); }
@@ -104,10 +140,24 @@ async function renderLang(job, lang) {
   L.status = "rendering"; L.error = null; await save(job);
   try {
     const dir = await langDir(job, lang);
+    L.cloneNotes = []; // speakers that asked for a cloned voice but got a preset (shown in the Studio)
+    const cloned = new Map(); // speaker -> embedding | null
     for (const line of L.lines) {
-      line.voice = voiceFor(job, line.speaker);
+      let voice = voiceFor(job, line.speaker);
+      let ttsVoice = voice;
+      if (voice === "clone") {
+        if (!cloned.has(line.speaker)) {
+          try { cloned.set(line.speaker, await getEmbedding(job, line.speaker)); }
+          catch (e) { cloned.set(line.speaker, null); L.cloneNotes.push(`${e.message}`); }
+          if (cloned.get(line.speaker) === null && !L.cloneNotes.length) L.cloneNotes.push(`Not enough clear speech from this speaker to copy their voice, so a studio voice was used.`);
+        }
+        const emb = cloned.get(line.speaker);
+        if (emb) ttsVoice = { embedding: emb };
+        else { voice = defaultVoice(job, line.speaker); ttsVoice = voice; }
+      }
+      line.voice = voice;
       // Too-long machine translations are shortened to fit; a line the user typed themselves is never rewritten.
-      await voiceLine(line, lang, dir, line.voice, { autoShorten: !line.edited });
+      await voiceLine(line, lang, dir, ttsVoice, { autoShorten: !line.edited });
     }
     mix(join(jobDir(job.id), job.videoFile), L.lines, join(dir, "dubbed.mp4"));
     L.dubbed = true;
@@ -165,11 +215,17 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
   if (!SOURCES[source]) return res.status(400).json({ error: `Spoken language must be one of: ${Object.keys(SOURCES).join(", ")}` });
   if (!targets.length || targets.some((t) => !TARGETS[t])) return res.status(400).json({ error: `Dub-into languages must be from: ${Object.keys(TARGETS).join(", ")}` });
   if (targets.includes(source)) return res.status(400).json({ error: "A video can't be dubbed into the language it is already spoken in." });
+  // Optional voice for every speaker: a preset name, or "clone" (match the original speakers; needs cloneConsent=true)
+  const voice = (req.body.voice || "").trim();
+  const consent = String(req.body.cloneConsent) === "true";
+  if (voice && voice !== "default" && voice !== "clone" && !VOICE_NAMES.has(voice)) return res.status(400).json({ error: `Unknown voice ${voice}` });
+  if (voice === "clone" && !consent) return res.status(400).json({ error: "Copying a voice needs your confirmation that you have permission from the speaker." });
 
   const job = {
     id: req.jobId, status: "processing", stage: "audio", error: null, source,
     originalName: req.file.originalname, videoFile: req.file.filename,
     createdAt: new Date().toISOString(), duration: null, segments: [], langs: {},
+    voiceChoice: voice && voice !== "default" ? voice : null, cloneConsent: voice === "clone" ? true : false,
   };
   jobs.set(job.id, job);
   await save(job);
@@ -306,21 +362,31 @@ app.post("/api/samples", async (req, res) => {
 app.get("/api/voices", (req, res) => res.json(VOICE_LIST));
 app.get("/api/jobs/:id/voices", (req, res) => {
   const job = getJob(req, res); if (!job) return;
-  res.json(speakersOf(job).map((sp, i) => ({ speaker: sp, label: `Speaker ${i + 1}`, voice: voiceFor(job, sp) })));
+  res.json(voicesPayload(job));
 });
-// body: { "<speakerId>": "VoiceName", ... }. Changing a voice invalidates any rendered dub.
+// body: { "<speakerId>": "VoiceName" | "clone" | "default", ..., cloneConsent?: true }
+// "clone" = match the original speaker. It copies a real person's voice, so it needs cloneConsent: true
+// (the user confirms they have permission) and at least 5 s of that speaker's speech.
+// Changing a voice invalidates any rendered dub.
 app.put("/api/jobs/:id/voices", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
   if (Object.values(job.langs).some((l) => l.status === "rendering")) return res.status(409).json({ error: "Busy rendering" });
+  const { cloneConsent, ...map } = req.body ?? {};
   const valid = new Set(speakersOf(job).map(String));
-  for (const [sp, v] of Object.entries(req.body ?? {})) {
+  for (const [sp, v] of Object.entries(map)) {
     if (!valid.has(sp)) return res.status(400).json({ error: `Unknown speaker ${sp}` });
-    if (!VOICE_NAMES.has(v)) return res.status(400).json({ error: `Unknown voice ${v}` });
+    if (v === "clone") {
+      if (cloneConsent !== true && !job.cloneConsent) return res.status(400).json({ error: "Copying a voice needs your confirmation that you have permission from the speaker." });
+      const secs = speechSeconds(job, Number(sp));
+      if (secs < MIN_CLONE_SECONDS) return res.status(400).json({ error: `This speaker talks for only ${secs.toFixed(1)} s. Copying a voice needs at least ${MIN_CLONE_SECONDS} s.` });
+    } else if (v !== "default" && !VOICE_NAMES.has(v)) return res.status(400).json({ error: `Unknown voice ${v}` });
   }
-  job.voices = { ...(job.voices ?? {}), ...req.body };
+  if (cloneConsent === true) job.cloneConsent = true;
+  job.voices = { ...(job.voices ?? {}) };
+  for (const [sp, v] of Object.entries(map)) { if (v === "default") delete job.voices[sp]; else job.voices[sp] = v; }
   for (const l of Object.values(job.langs)) if (l.dubbed) { l.dubbed = false; l.status = "review"; }
   await save(job);
-  res.json(speakersOf(job).map((sp, i) => ({ speaker: sp, label: `Speaker ${i + 1}`, voice: voiceFor(job, sp) })));
+  res.json(voicesPayload(job));
 });
 
 // ---------- thumbnails (Library cards) ----------

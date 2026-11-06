@@ -9,6 +9,8 @@ Built for the Gnani AI "Great Indian AI Internship Challenge". Deadline: Nov 10 
 
 - Nov 6: All 10 languages are dub targets (kn, ta, te, mr, ml, bn, gu, pa, hi, en); a video can't be dubbed into its own spoken language. Spoken (STT) languages: hi, en, kn, ta, te, ml, mr, bn (gu/pa excluded: batch STT). The X/LinkedIn caption card ("Post your demo") was REMOVED by the user: not part of the project. Lip-sync stays OUT (see below). Library supports rename (display title only) and delete (confirmation; refused while a video is processing).
 
+- Nov 6 (later): Voice cloning is BUILT ("Match original speaker"): 5-30 s of each speaker's own speech is cut from the video audio -> Gnani embedding -> `vachana-vc-v1` (the live API REQUIRES `model`, despite its docs). Opt-in only: the user must confirm permission (Studio prompt; Telegram button says "I have permission"); the server refuses without `cloneConsent`. Needs >= 5 s of that speaker's speech, else a studio voice is used and a note is shown. Telegram asks for a voice after the language and has a "Change voice" button. Tested cloned voices: Hindi, Kannada, Tamil, English only.
+
 ## Rules for you (Claude Code)
 - Guide me step by step. Small steps, run and verify each one before the next.
 - Never put API keys in code or chat. Use `.env` (gitignored) and `.env.example`.
