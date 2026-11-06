@@ -13,6 +13,8 @@ Built for the Gnani AI "Great Indian AI Internship Challenge". Deadline: Nov 10 
 
 - Nov 6 (gaps): No dead air. Time-fit is now 0.75-1.25x atempo (was 0.85-1.25x). A line whose speech is < 85% of its slot is reworded fuller by the LLM (same meaning, no new facts; kept only if it fits better and stays <= 110% of the slot); > 120% is shortened. Lines the user edited are never rewritten.
 
+- Nov 6 (Telegram card): The Studio's Telegram card only shows the bot status, the groups the bot is in, and the viewers. The "Send to Telegram" button and its API route were REMOVED (sending happens inside Telegram via the bot's "Share to group"). "Download dubbed MP4" lives in the video player and downloads the dub of the selected language/voice.
+
 ## Rules for you (Claude Code)
 - Guide me step by step. Small steps, run and verify each one before the next.
 - Never put API keys in code or chat. Use `.env` (gitignored) and `.env.example`.

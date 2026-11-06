@@ -189,7 +189,7 @@ export default function App() {
                 </div>
 
                 <aside className="flex min-w-0 max-w-[420px] flex-[1_1_380px] flex-col gap-6 max-lg:max-w-none">
-                  <Telegram job={job} langId={lang} L={L} tg={tg} onError={setErr} />
+                  <Telegram tg={tg} />
                 </aside>
               </div>
             )}

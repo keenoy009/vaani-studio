@@ -1,5 +1,5 @@
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { api, fmt } from "../api.js";
+import { api, fmt, LANGS } from "../api.js";
 import { chunkText, rowAt } from "../subtitles.js";
 
 const BARS = [10, 18, 26, 14, 30, 20, 12, 28, 22, 16, 30, 12, 24, 14];
@@ -18,6 +18,7 @@ export default function Player({ ref, job, langId, L, mode, setMode, dubVer, onT
   const [dur, setDur] = useState(job.duration || 0);
 
   const dubOk = L.dubbed;
+  const langName = LANGS.find((l) => l.id === langId)?.name ?? langId;
   const dub = mode === "dub" && dubOk;
   const src = dub ? api.dubUrl(job.id, langId, dubVer) : api.originalUrl(job.id);
 
@@ -109,6 +110,13 @@ export default function Player({ ref, job, langId, L, mode, setMode, dubVer, onT
         <span className="font-mono text-sm text-mute"><span className="text-ink">{fmt(t)}</span> / {fmt(dur)}</span>
         <input type="range" aria-label="Seek" min={0} max={dur || 1} step={0.1} value={Math.min(t, dur || 1)} className="min-w-[120px] flex-1 accent-[#A99BFF]"
           onChange={(e) => { const v = video.current; v.currentTime = +e.target.value; setT(+e.target.value); }} />
+        {dubOk && (
+          <a href={api.downloadUrl(job.id, langId)} title="Download the dubbed video you are looking at (this language and voice)"
+            className="inline-flex h-[34px] items-center gap-2 rounded-full border border-[#2C3247] px-3.5 text-xs font-bold text-ink no-underline hover:border-lav hover:text-lav">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14" /></svg>
+            Download dubbed MP4 · {langName}
+          </a>
+        )}
         {speakers.length > 1 && (
           <span className="inline-flex h-[34px] items-center gap-2 rounded-full border border-mint/30 bg-mint/10 px-3.5 text-xs font-semibold text-mint">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>

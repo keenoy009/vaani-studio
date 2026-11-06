@@ -25,7 +25,6 @@ const label = (id) => `${LANGS[id][0]} ${LANGS[id][1] === LANGS[id][0] ? "" : "Â
 // ---------- state shown in the Studio (groups the bot is in, people who used it) ----------
 let running = false;
 let botUsername = null;
-let activeBot = null;
 let data = { groups: [], viewers: [] };
 
 async function loadState() {
@@ -352,16 +351,9 @@ export async function startBot({ token, apiBase }) {
   try { await bot.init(); } catch (e) { console.error("[bot] Telegram rejected the token:", e.description || e.message); return null; }
   botUsername = bot.botInfo.username;
   await bot.api.setMyCommands([{ command: "start", description: "How to use Vaani" }, { command: "help", description: "Help" }]).catch(() => {});
-  activeBot = bot;
   bot.start({ allowed_updates: ["message", "callback_query", "my_chat_member"], onStart: () => { running = true; console.log(`[bot] online as @${botUsername}`); } })
     .catch((e) => { running = false; console.error("[bot] stopped:", e.description || e.message); })
     .finally(() => { running = false; });
   process.once("SIGINT", () => bot.stop());
   return bot;
-}
-
-/** Post a finished dub into a Telegram chat (used by the Studio's "Send to Telegram"). */
-export async function sendDub(chatId, filePath, caption) {
-  if (!activeBot || !running) throw new Error("The Telegram bot is not running.");
-  await activeBot.api.sendVideo(chatId, new InputFile(filePath), { caption, supports_streaming: true });
 }
