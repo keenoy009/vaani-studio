@@ -170,7 +170,20 @@ export function createBot({ token, apiBase, download, botInfo, internalKey }) {
   }
 
   // ----- commands -----
-  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.\n\nYou can pick the voice too, or have me match the original speaker's voice.\n\nIn a group: send a video, or reply to a video with /dub.";
+  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.\n\nYou can pick the voice too, or have me match the original speaker's voice.";
+  // Telegram "privacy mode" hides ordinary group messages (like a video) from a bot unless the bot is a group admin.
+  // Commands always arrive, so "/dub" as a reply to a video is the way that always works.
+  async function seesAllMessages(ctx) {
+    if (botInfo?.can_read_all_group_messages || bot.botInfo?.can_read_all_group_messages) return true;
+    try { const m = await ctx.api.getChatMember(ctx.chat.id, bot.botInfo.id); return ["administrator", "creator"].includes(m.status); } catch { return false; }
+  }
+  async function showHelp(ctx) {
+    if (ctx.chat.type === "private") return ctx.reply(`${welcome}\n\nIn a group, reply to a video with /dub.`);
+    const all = await seesAllMessages(ctx);
+    return ctx.reply("Hi, I'm Vaani 🎙️ I dub videos into Indian languages.\n\n" + (all
+      ? "Send a video here, or reply to one with /dub."
+      : "Reply to a video with /dub and I'll dub it.\n\nI can't see ordinary videos in this group, so please use /dub. (To make me react to every video, make me a group admin.)"));
+  }
   bot.command("start", async (ctx) => {
     const payload = ctx.match?.trim();
     const m = payload && /^share_([0-9a-f-]{36})_([a-z]{2})$/.exec(payload);
@@ -180,9 +193,9 @@ export function createBot({ token, apiBase, download, botInfo, internalKey }) {
       catch { await ctx.reply("Sorry, that dubbed video is not available any more."); }
       return;
     }
-    await ctx.reply(welcome);
+    await showHelp(ctx);
   });
-  bot.command("help", (ctx) => ctx.reply(welcome));
+  bot.command("help", (ctx) => showHelp(ctx));
 
   // ----- a video arrives -----
   // Works in private chats AND groups. `replyTo` = the message holding the video (the video itself, or the one /dub replied to).
