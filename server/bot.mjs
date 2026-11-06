@@ -56,6 +56,13 @@ const STAGE_TEXT = { audio: "Extracting the audio", transcribe: "Listening and s
  */
 export function createBot({ token, apiBase, download, botInfo }) {
   const bot = new Bot(token, botInfo ? { botInfo } : {});
+  // Log what arrives (type only, never the content) so problems are easy to diagnose.
+  bot.use(async (ctx, next) => {
+    const kinds = ["text", "video", "document", "animation", "photo", "audio", "voice", "video_note", "sticker"].filter((k) => ctx.msg?.[k]);
+    const what = ctx.callbackQuery ? `button ${ctx.callbackQuery.data?.slice(0, 2)}` : ctx.myChatMember ? "added/removed in a chat" : kinds.join("+") || Object.keys(ctx.update).filter((k) => k !== "update_id").join("+");
+    console.log(`[bot] ${new Date().toLocaleTimeString()} ${ctx.chat?.type ?? "?"}: ${what}`);
+    await next();
+  });
   const pending = new Map(); // request key -> { fileId, name, size, duration, userName, chatId, source, started, at }
 
   const fetchDownload = download ?? (async (file) => {
@@ -148,8 +155,16 @@ export function createBot({ token, apiBase, download, botInfo }) {
   bot.command("help", (ctx) => ctx.reply(welcome));
 
   // ----- a video arrives -----
+  const groupHintAt = new Map(); // chat id -> time of the last "please use a private chat" hint (so we never spam a group)
   async function onMedia(ctx, media) {
-    if (ctx.chat.type !== "private") return; // only dub in private chats; groups just receive finished dubs
+    if (ctx.chat.type !== "private") { // dubbing happens in private chats; groups just receive finished dubs
+      const last = groupHintAt.get(ctx.chat.id) ?? 0;
+      if (Date.now() - last > 3600_000) {
+        groupHintAt.set(ctx.chat.id, Date.now());
+        await ctx.reply(`To dub a video, send it to me in a private chat: https://t.me/${ctx.me.username}`, { reply_parameters: { message_id: ctx.msg.message_id } }).catch(() => {});
+      }
+      return;
+    }
     if (media.file_size && media.file_size > MAX_DOWNLOAD) {
       return ctx.reply(`That video is ${(media.file_size / 1048576).toFixed(0)} MB. Telegram only lets bots download files up to 20 MB, so please send a smaller or shorter one.`);
     }
@@ -168,7 +183,9 @@ export function createBot({ token, apiBase, download, botInfo }) {
   bot.on("message:document", (ctx) => (ctx.msg.document.mime_type?.startsWith("video/")
     ? onMedia(ctx, ctx.msg.document)
     : ctx.chat.type === "private" ? ctx.reply("I can only dub videos. Please send an MP4 or other video file.") : undefined));
-  bot.on("message:audio", (ctx) => ctx.chat.type === "private" && ctx.reply("I need a video file for now. Please send a video."));
+  bot.on("message:animation", (ctx) => onMedia(ctx, ctx.msg.animation)); // some apps send short videos as "animations"
+  // Anything else in a private chat still gets an answer, so the bot never looks dead.
+  bot.on("message", (ctx) => (ctx.chat.type === "private" ? ctx.reply("I can dub videos. Please send me a video (MP4 or similar, up to 5 minutes and 20 MB).") : undefined));
 
   // ----- button: spoken language -----
   bot.callbackQuery(/^s:([0-9a-f]{8}):([a-z]{2})$/, async (ctx) => {
