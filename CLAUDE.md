@@ -59,3 +59,4 @@ User sends a video -> bot asks language (inline buttons) -> progress message -> 
 
 ## First task
 Ask me my OS and what is installed (Node, ffmpeg, git). Then set up the repo, then build the riskiest part first: one short Hindi clip through STT -> translate -> TTS -> dubbed output, using a CLI script, before any UI.
+- Nov 6 (Konkani): "Konkani" (`gom`) is an EXPERIMENTAL dub target, added at the user's request (the user can review Konkani). Gnani has no Konkani voice/STT: Gemini writes Goan Konkani in Devanagari, the Marathi voice model (`mr-IN`) speaks it, so the accent is Marathi-like. Dub-into only (no Konkani source). Labelled "experimental" in the UI and bot; "Select all" skips it. Cloned voices are untested for it. Needs review by a Konkani speaker before any real use.

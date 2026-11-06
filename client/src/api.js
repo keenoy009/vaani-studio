@@ -54,6 +54,7 @@ export const LANGS = [
   { id: "pa", name: "Punjabi", native: "ਪੰਜਾਬੀ" },
   { id: "hi", name: "Hindi", native: "हिन्दी" },
   { id: "en", name: "English", native: "English" },
+  { id: "gom", name: "Konkani", native: "कोंकणी", experimental: true }, // no Gnani Konkani voice: Marathi voice reads Goan Konkani text
 ]; // all 10 languages from the brief; a video can't be dubbed into its own spoken language
 // Spoken languages we can transcribe (Gujarati and Punjabi are not supported by Gnani's batch speech-to-text).
 export const SOURCES = { hi: "Hindi", en: "English", kn: "Kannada", ta: "Tamil", te: "Telugu", ml: "Malayalam", mr: "Marathi", bn: "Bengali" };

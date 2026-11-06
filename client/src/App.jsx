@@ -200,7 +200,7 @@ function Studio({ user, onSignOut }) {
                             className="flex flex-col gap-1 rounded-[18px] p-4 text-left text-ink"
                             style={{ border: `1px solid ${active ? "#A99BFF" : "#262B40"}`, background: active ? "rgba(169,155,255,0.12)" : "#12141D" }}>
                             <span className="text-xl font-bold">{l.native}</span>
-                            <span className="flex items-center gap-1.5 text-xs text-mute"><span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />{l.name} · {label}</span>
+                            <span className="flex items-center gap-1.5 text-xs text-mute"><span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />{l.name}{l.experimental ? " (experimental)" : ""} · {label}</span>
                           </button>
                         );
                       })}

@@ -17,6 +17,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const LANGS = {
   hi: ["हिन्दी", "Hindi"], en: ["English", "English"], kn: ["ಕನ್ನಡ", "Kannada"], ta: ["தமிழ்", "Tamil"], te: ["తెలుగు", "Telugu"],
   ml: ["മലയാളം", "Malayalam"], mr: ["मराठी", "Marathi"], bn: ["বাংলা", "Bengali"], gu: ["ગુજરાતી", "Gujarati"], pa: ["ਪੰਜਾਬੀ", "Punjabi"],
+  gom: ["कोंकणी", "Konkani (experimental)"],
 };
 const SOURCES = ["hi", "en", "kn", "ta", "te", "ml", "mr", "bn"]; // spoken languages Gnani's batch STT handles
 const TARGETS = Object.keys(LANGS);                              // all 10

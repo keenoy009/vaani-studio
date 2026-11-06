@@ -46,7 +46,8 @@ export default function Upload({ onUpload, onSample }) {
   };
   const toggle = (id) => setTargets((t) => (t.includes(id) ? (t.length > 1 ? t.filter((x) => x !== id) : t) : [...t, id]));
   const options = LANGS.filter((l) => l.id !== source);
-  const allOn = options.every((l) => targets.includes(l.id));
+  const stable = options.filter((l) => !l.experimental); // "Select all" skips experimental languages
+  const allOn = stable.every((l) => targets.includes(l.id));
 
   const tooLong = seconds != null && seconds > MAX_SECONDS;
   const tooBig = file && file.size > MAX_MB * 1048576;
@@ -128,7 +129,7 @@ export default function Upload({ onUpload, onSample }) {
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold">Dub into <span className="font-normal text-mute">· {targets.length} selected</span></span>
-              <button type="button" onClick={() => setTargets(allOn ? [options[0].id] : options.map((l) => l.id))} className="border-0 bg-transparent p-0 text-xs font-bold text-lav">{allOn ? "Clear" : "Select all"}</button>
+              <button type="button" onClick={() => setTargets(allOn ? [stable[0].id] : stable.map((l) => l.id))} className="border-0 bg-transparent p-0 text-xs font-bold text-lav">{allOn ? "Clear" : "Select all"}</button>
             </div>
             <div className="grid grid-cols-3 gap-2.5 max-sm:grid-cols-2">
               {options.map((l) => {
@@ -138,7 +139,7 @@ export default function Upload({ onUpload, onSample }) {
                     className="relative flex flex-col items-start gap-0.5 rounded-2xl px-3.5 py-3 text-left text-ink"
                     style={{ border: `1px solid ${on ? "#A99BFF" : "#262B40"}`, background: on ? "linear-gradient(145deg, rgba(139,123,255,0.22), rgba(255,166,231,0.10))" : "#12141D" }}>
                     <span className="text-[17px] leading-snug font-bold">{l.native}</span>
-                    <span className="text-[11px] text-mute">{l.name}</span>
+                    <span className="text-[11px] text-mute">{l.name}{l.experimental && <span className="ml-1.5 rounded-full bg-[#2A2236] px-1.5 py-0.5 text-[9px] font-bold tracking-wide text-peach">EXPERIMENTAL</span>}</span>
                     {on && <span className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-lav text-[#0B0A18]"><Icon d="M5 12.5l4.5 4.5L19 7.5" size={10} sw={3.4} /></span>}
                   </button>
                 );

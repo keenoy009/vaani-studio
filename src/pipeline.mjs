@@ -22,6 +22,10 @@ export const TARGETS = {
   // Marathi shares the Devanagari script with Hindi, so the script check alone cannot tell them apart;
   // translate() also rejects any line that comes back identical to the Hindi source.
   mr: { name: "Marathi", code: "mr-IN", script: /[ऀ-ॿ]/g, example: "नमस्कार मित्रांनो" },
+  // EXPERIMENTAL. Gnani has no Konkani voice, so the text is Goan Konkani (Devanagari, written by the LLM) and the
+  // audio comes from the Marathi voice model (`tts`), which reads it clearly but with a Marathi accent.
+  gom: { name: "Konkani", code: "gom-IN", tts: "mr-IN", experimental: true, script: /[ऀ-ॿ]/g, example: "नमस्कार इश्टांनो",
+    note: "Write Goan Konkani (Devanagari, as spoken in Goa), using real Konkani words and grammar, NOT Marathi or Hindi. " },
 };
 // Spoken languages we can transcribe. Gujarati and Punjabi are left out: the project brief notes that Gnani's batch STT does not handle them.
 export const SOURCES = {
@@ -112,7 +116,9 @@ export async function translate(segments, targetKey, sourceKey = "hi") {
   const t = TARGETS[targetKey], s = SOURCES[sourceKey];
   const system =
     `You are a professional dubbing translator. Translate ${s.name} speech into natural, spoken ${t.name} for a voice-over. ` +
-    `The output MUST be written in the native ${t.name} script (for example "${t.example}"), NOT Bengali, Devanagari, or Latin letters. ` +
+    (t.note ?? "") +
+    `The output MUST be written in the native ${t.name} script (for example "${t.example}"), NOT Bengali, Devanagari, or Latin letters` +
+    (t.note ? " (Devanagari is correct for Konkani)" : "") + `. ` +
     `Rules: keep the meaning; use simple everyday words suitable for health workers, farmers and students; keep each line about as long ` +
     `as the original when spoken, because it must fit the same time slot; write numbers as spoken words; do not add explanations. ` +
     `Reply ONLY with JSON: an array of objects {"id": number, "text": string}, one per input line, same ids.`;
@@ -155,7 +161,7 @@ export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoF
   const t = TARGETS[targetKey];
   const slot = line.end - line.start;
   const raw = join(dir, `tts_${line.id}.wav`);
-  await writeFile(raw, await tts(line.text, t.code, voice));
+  await writeFile(raw, await tts(line.text, t.tts ?? t.code, voice));
   line.tts_seconds = +duration(raw).toFixed(2);
 
   for (let tries = 1; autoFit && tries <= 3 && line.tts_seconds / slot > MAX_RATIO_BEFORE_TEMPO; tries++) {
@@ -165,7 +171,7 @@ export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoF
     if (!shorter || !inRightScript(shorter, t) || shorter.length >= line.text.length) continue;
     line.text = shorter;
     line.shortened = true; line.lengthened = false; // machine-shortened to fit the time slot (the UI shows a tag)
-    await writeFile(raw, await tts(line.text, t.code, voice));
+    await writeFile(raw, await tts(line.text, t.tts ?? t.code, voice));
     line.tts_seconds = +duration(raw).toFixed(2);
   }
   // Too SHORT (the dub would leave dead air at the end of the slot): try a fuller wording, keep it only if it fits better.
@@ -175,7 +181,7 @@ export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoF
     catch (e) { if (/busy right now/.test(e.message)) break; continue; } // nice-to-have: give up if the AI is overloaded, otherwise try again
     // (the real limit is how long the speech turns out to be, checked below; 3x is only a sanity guard)
     if (!longer || !inRightScript(longer, t) || longer.length <= line.text.length || longer.length > line.text.length * 3) continue;
-    const buf = await tts(longer, t.code, voice);
+    const buf = await tts(longer, t.tts ?? t.code, voice);
     const probe = join(dir, `tts_${line.id}_try.wav`);
     await writeFile(probe, buf);
     const secs = +duration(probe).toFixed(2);
