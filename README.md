@@ -27,10 +27,18 @@ You need **Node 20+** and **ffmpeg** (on your PATH).
 ```bash
 npm install
 npm --prefix client install
-cp .env.example .env      # Windows PowerShell: copy .env.example .env
 ```
 
-Fill in `.env` with your own keys: `GNANI_API_KEY` and `LLM_API_KEY` (a Gemini key). `TELEGRAM_BOT_TOKEN` is optional; leave it empty to run without the bot. Never commit `.env`; it is gitignored.
+Create a file named `.env` in the project folder with your own keys. Never commit it; it is gitignored.
+
+```
+GNANI_API_KEY=your Gnani key
+LLM_PROVIDER=gemini
+LLM_API_KEY=your Gemini key
+TELEGRAM_BOT_TOKEN=optional, from @BotFather (leave out to run without the bot)
+```
+
+Optional: `ALLOW_SIGNUP` (false closes sign-up), `TRUST_PROXY` (true behind a reverse proxy), `ALLOWED_ORIGINS` (extra allowed websites, comma-separated), `NODE_ENV=production` (Secure cookies over HTTPS), `LLM_MODEL` and `LLM_FALLBACK_MODEL`.
 
 ## Run
 
