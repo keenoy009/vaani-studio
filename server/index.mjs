@@ -13,10 +13,11 @@ import { join, extname, resolve } from "node:path";
 import { extractAudio, transcribe, translate, voiceLine, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
 import { duration, tts, createVoiceEmbedding } from "../src/tts.mjs";
 import { startBot, telegramState } from "./bot.mjs";
+import { initAuth, authRouter, authenticate, requireAuth, sameOrigin, securityHeaders, canSee, INTERNAL_KEY } from "./auth.mjs";
 import { execFileSync } from "node:child_process";
 
 const PORT = process.env.PORT || 3001;
-const JOBS_DIR = resolve("work/jobs");
+const JOBS_DIR = resolve(process.env.JOBS_DIR || "work/jobs");
 // Timbre v3.0 voices (from the Gnani docs). Default: one per speaker, rotating; the user can override per speaker.
 const VOICE_LIST = [
   { name: "Shivani", gender: "Female", persona: "Warm, empathetic" }, { name: "Avinash", gender: "Male", persona: "Professional" },
@@ -42,6 +43,7 @@ const ALLOWED_EXT = new Set([".mp4", ".mov", ".mkv", ".webm", ".m4v"]);
 const MIX_VERSION = 2;
 
 await mkdir(JOBS_DIR, { recursive: true });
+await initAuth();
 
 // ---------- job store (in memory, mirrored to work/jobs/<id>/job.json) ----------
 const jobs = new Map();
@@ -181,7 +183,14 @@ async function dubLang(job, lang) {
 
 // ---------- HTTP ----------
 const app = express();
+if (process.env.TRUST_PROXY === "true") app.set("trust proxy", 1); // set when running behind a reverse proxy (so req.ip is the real client)
+app.disable("x-powered-by");
+app.use(securityHeaders);
 app.use(express.json({ limit: "1mb" }));
+// Everything under /api needs a signed-in user, except the sign-in/sign-up routes themselves.
+app.use("/api", sameOrigin, authenticate);
+app.use("/api/auth", authRouter);
+app.use("/api", requireAuth);
 
 const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },
@@ -196,11 +205,13 @@ const upload = multer({
   fileFilter: (req, file, cb) => cb(null, ALLOWED_EXT.has(extname(file.originalname).toLowerCase())),
 });
 
+// A job you may not open is reported as "not found" (never "forbidden"), so ids can't be probed.
 const getJob = (req, res) => {
   const job = jobs.get(req.params.id);
-  if (!job) res.status(404).json({ error: "Job not found" });
+  if (!job || !canSee(req.user, job)) { res.status(404).json({ error: "Job not found" }); return undefined; }
   return job;
 };
+const ownerOf = (req) => (req.user.role === "system" ? "telegram" : req.user.id);
 const getLang = (req, res, job) => {
   const L = job.langs[req.params.lang];
   if (!L) res.status(404).json({ error: "Language not on this job" });
@@ -222,7 +233,7 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
   if (voice === "clone" && !consent) return res.status(400).json({ error: "Copying a voice needs your confirmation that you have permission from the speaker." });
 
   const job = {
-    id: req.jobId, status: "processing", stage: "audio", error: null, source,
+    id: req.jobId, ownerId: ownerOf(req), status: "processing", stage: "audio", error: null, source,
     originalName: req.file.originalname, videoFile: req.file.filename,
     createdAt: new Date().toISOString(), duration: null, segments: [], langs: {},
     voiceChoice: voice && voice !== "default" ? voice : null, cloneConsent: voice === "clone" ? true : false,
@@ -234,7 +245,7 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
 });
 
 app.get("/api/jobs", (req, res) =>
-  res.json([...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((j) => ({
+  res.json([...jobs.values()].filter((j) => canSee(req.user, j)).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((j) => ({
     id: j.id, originalName: j.originalName, title: j.title ?? null, status: j.status, stage: j.stage, createdAt: j.createdAt, source: j.source, duration: j.duration,
     langs: Object.fromEntries(Object.entries(j.langs).map(([k, v]) => [k, { status: v.status, dubbed: v.dubbed, lines: v.lines.length }])),
   }))));
@@ -348,7 +359,7 @@ app.post("/api/samples", async (req, res) => {
   const id = randomUUID();
   await mkdir(jobDir(id), { recursive: true });
   const job = {
-    id, status: "processing", stage: "audio", error: null, source: "hi",
+    id, ownerId: ownerOf(req), status: "processing", stage: "audio", error: null, source: "hi",
     originalName: "sample_handwashing_hi.mp4", videoFile: "input.mp4",
     createdAt: new Date().toISOString(), duration: null, segments: [], langs: {}, voices: {},
   };
@@ -430,6 +441,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Vaani Studio API on http://localhost:${PORT}`);
-  if (process.env.TELEGRAM_BOT_TOKEN) startBot({ token: process.env.TELEGRAM_BOT_TOKEN, apiBase: `http://localhost:${PORT}` });
+  if (process.env.TELEGRAM_BOT_TOKEN) startBot({ token: process.env.TELEGRAM_BOT_TOKEN, apiBase: `http://localhost:${PORT}`, internalKey: INTERNAL_KEY });
   else console.log("[bot] TELEGRAM_BOT_TOKEN is not set, so the Telegram bot is off.");
 });

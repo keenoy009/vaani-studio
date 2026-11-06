@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, LANGS, SOURCES, displayName } from "./api.js";
+import AuthPage from "./components/AuthPage.jsx";
+import AccountMenu from "./components/AccountMenu.jsx";
 import Upload from "./components/Upload.jsx";
 import Processing from "./components/Processing.jsx";
 import Player from "./components/Player.jsx";
@@ -13,8 +15,6 @@ const store = (key) => ({
   get: () => { try { return localStorage.getItem(key); } catch { return null; } },
   set: (v) => { try { v ? localStorage.setItem(key, v) : localStorage.removeItem(key); } catch { /* storage blocked */ } },
 });
-const jobStore = store("vaani.jobId");
-const nameStore = store("vaani.name");
 
 const NAV = [
   { id: "studio", label: "Studio", d: "M4 12h2M8 8v8M12 4v16M16 8v8M20 12h-2" },
@@ -24,7 +24,34 @@ const NAV = [
 ];
 const TITLES = { studio: "Dubbing Studio", library: "Library", bot: "Telegram bot", settings: "Settings" };
 
+// ---- top level: sign-in gate ----
 export default function App() {
+  const [user, setUser] = useState(undefined); // undefined = still checking, null = signed out
+  const [signupOpen, setSignupOpen] = useState(true);
+  useEffect(() => {
+    api.me().then((d) => { setUser(d.user); setSignupOpen(d.signupOpen !== false); })
+      .catch((e) => { setUser(null); if (e.data?.signupOpen === false) setSignupOpen(false); });
+  }, []);
+  useEffect(() => { // the server ended the session (expired, signed out elsewhere, password changed)
+    const out = () => setUser(null);
+    window.addEventListener("vaani:signed-out", out);
+    return () => window.removeEventListener("vaani:signed-out", out);
+  }, []);
+  const signOut = async () => { try { await api.logout(); } catch { /* the cookie is cleared below either way */ } setUser(null); };
+
+  if (user === undefined) {
+    return <div className="flex min-h-screen items-center justify-center bg-bg" role="status" aria-label="Loading">
+      <span className="pulse flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#8B7BFF] to-[#C8BFFF]">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#0B0A18" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M5 9v6M9.5 5v14M14.5 8v8M19 10.5v3" /></svg>
+      </span>
+    </div>;
+  }
+  if (!user) return <AuthPage signupOpen={signupOpen} onAuthed={setUser} />;
+  return <Studio key={user.id} user={user} onSignOut={signOut} />;
+}
+
+function Studio({ user, onSignOut }) {
+  const jobStore = useMemo(() => store(`vaani.jobId.${user.id}`), [user.id]); // each account remembers its own last video
   // ?job=<id> in the address bar opens that job (handy for sharing/debugging); otherwise the last one used.
   const [jobId, setJobId] = useState(() => new URLSearchParams(location.search).get("job") || jobStore.get());
   const [job, setJob] = useState(null);
@@ -34,11 +61,8 @@ export default function App() {
   const [err, setErr] = useState("");
   const [dubVer, setDubVer] = useState(0); // bumps when a new dub finishes so <video> reloads
   const [t, setT] = useState(0);
-  const [name, setNameState] = useState(nameStore.get() || "");
   const playerRef = useRef(null);
   const tg = useTelegram();
-
-  const setName = (v) => { setNameState(v); nameStore.set(v); };
 
   const refresh = useCallback(async () => {
     if (!jobId) return;
@@ -130,8 +154,7 @@ export default function App() {
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
               New dub
             </button>
-            <button type="button" aria-label="Profile and settings" onClick={() => setPage("settings")}
-              className="flex h-11 w-11 items-center justify-center rounded-full border-0 bg-gradient-to-br from-pink to-lav text-[15px] font-extrabold text-[#1B0B17]">{(name.trim()[0] || "V").toUpperCase()}</button>
+            <AccountMenu user={user} onSettings={() => setPage("settings")} onSignOut={onSignOut} />
           </div>
         </header>
 
@@ -144,7 +167,7 @@ export default function App() {
 
         {page === "library" && <Library onOpen={open} currentId={jobId} onNew={newDub} onChanged={refresh} onDeleted={newDub} />}
         {page === "bot" && <BotPage tg={tg} />}
-        {page === "settings" && <Settings job={job} name={name} setName={setName} onChanged={refresh} onError={setErr} onNew={newDub} />}
+        {page === "settings" && <Settings job={job} user={user} onSignOut={onSignOut} onChanged={refresh} onError={setErr} onNew={newDub} />}
 
         {page === "studio" && (
           <>

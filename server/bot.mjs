@@ -68,8 +68,9 @@ const STAGE_TEXT = { audio: "Extracting the audio", transcribe: "Listening and s
  * @param {string} o.apiBase    e.g. http://localhost:3001
  * @param {Function} [o.download]  async (file, token) => Buffer ; injectable so tests need no Telegram network
  * @param {object} [o.botInfo]  skip the getMe call (tests)
+ * @param {string} [o.internalKey]  secret that lets the bot call the (sign-in protected) Studio API
  */
-export function createBot({ token, apiBase, download, botInfo }) {
+export function createBot({ token, apiBase, download, botInfo, internalKey }) {
   const bot = new Bot(token, botInfo ? { botInfo } : {});
   // Log what arrives (type only, never the content) so problems are easy to diagnose.
   bot.use(async (ctx, next) => {
@@ -86,8 +87,10 @@ export function createBot({ token, apiBase, download, botInfo }) {
     return Buffer.from(await r.arrayBuffer());
   });
 
+  // The bot is not a signed-in person: it identifies itself to the Studio API with a secret only this server process knows.
+  const internal = internalKey ? { "X-Internal-Key": internalKey } : {};
   const apiJson = async (method, path, body) => {
-    const r = await fetch(apiBase + path, { method, signal: AbortSignal.timeout(60000), ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}) });
+    const r = await fetch(apiBase + path, { method, signal: AbortSignal.timeout(60000), headers: { ...internal, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
     return j;
@@ -137,7 +140,7 @@ export function createBot({ token, apiBase, download, botInfo }) {
   }
 
   async function sendResult(api, chatId, jobId, lang, title, inGroup = false) {
-    const r = await fetch(`${apiBase}/api/jobs/${jobId}/langs/${lang}/video?download=1`, { signal: AbortSignal.timeout(60000) });
+    const r = await fetch(`${apiBase}/api/jobs/${jobId}/langs/${lang}/video?download=1`, { headers: internal, signal: AbortSignal.timeout(60000) });
     if (!r.ok) throw new Error("The dubbed video is not available any more.");
     const buf = Buffer.from(await r.arrayBuffer());
     const me = botUsername || (await api.getMe()).username;
@@ -261,7 +264,7 @@ export function createBot({ token, apiBase, download, botInfo }) {
       if (voice !== "default") fd.append("voice", voice);
       if (voice === "clone") fd.append("cloneConsent", "true"); // choosing "Match original voice (I have permission)" is the confirmation
       fd.append("video", new Blob([buf]), /\.(mp4|mov|mkv|webm|m4v)$/i.test(p.name) ? p.name : "video.mp4");
-      const r = await fetch(`${apiBase}/api/jobs`, { method: "POST", body: fd, signal: AbortSignal.timeout(120000) });
+      const r = await fetch(`${apiBase}/api/jobs`, { method: "POST", headers: internal, body: fd, signal: AbortSignal.timeout(120000) });
       const job = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(job.error || "The Studio rejected the video.");
       await apiJson("PATCH", `/api/jobs/${job.id}`, { title: `Telegram · ${p.userName}` }).catch(() => {});
@@ -359,9 +362,9 @@ export function createBot({ token, apiBase, download, botInfo }) {
 }
 
 // ---------- start / use from the server ----------
-export async function startBot({ token, apiBase }) {
+export async function startBot({ token, apiBase, internalKey }) {
   await loadState();
-  const bot = createBot({ token, apiBase });
+  const bot = createBot({ token, apiBase, internalKey });
   try { await bot.init(); } catch (e) { console.error("[bot] Telegram rejected the token:", e.description || e.message); return null; }
   botUsername = bot.botInfo.username;
   await bot.api.setMyCommands([

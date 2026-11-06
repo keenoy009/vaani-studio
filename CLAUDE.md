@@ -15,6 +15,9 @@ Built for the Gnani AI "Great Indian AI Internship Challenge". Deadline: Nov 10 
 
 - Nov 6 (Telegram card): The Studio's Telegram card only shows the bot status, the groups the bot is in, and the viewers. The "Send to Telegram" button and its API route were REMOVED (sending happens inside Telegram via the bot's "Share to group"). "Download dubbed MP4" lives in the video player and downloads the dub of the selected language/voice.
 
+- Nov 6 (accounts): Sign-in is REQUIRED for the whole app/API. Email + password accounts (scrypt hashes, HttpOnly SameSite=Lax session cookie, only token hashes stored, login throttling, Origin check against cross-site requests) in `work/auth.json` (server/auth.mjs). First account = workspace "owner" (also sees Telegram/older jobs); other members see only their own videos. The Telegram bot is not a person: it calls the API with a private `X-Internal-Key` (random per start). Forgot password: `npm run reset-password -- <email>` (no email service). Not built: email verification, password-reset emails, social login. Storage is a single JSON file; a real multi-server deployment would need a database.
+- Nov 6 (bot in groups): the bot dubs videos in groups too (send a video, or reply to one with /dub, which works even with Telegram privacy mode on). Only the sender can choose languages/voice in a group. No "Share to group" button inside a group.
+
 ## Rules for you (Claude Code)
 - Guide me step by step. Small steps, run and verify each one before the next.
 - Never put API keys in code or chat. Use `.env` (gitignored) and `.env.example`.

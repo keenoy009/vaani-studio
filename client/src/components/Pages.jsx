@@ -219,7 +219,62 @@ function StatusRow({ ok, title, hint, label }) {
   );
 }
 
-export function Settings({ job, name, setName, onChanged, onError, onNew }) {
+// Who is signed in, change password, sign out.
+function AccountCard({ user, onSignOut }) {
+  const [open, setOpen] = useState(false);
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null); // { field, text }
+  const [ok, setOk] = useState(false);
+  const [out, setOut] = useState(false);
+  const initial = ([...user.name.trim()][0] || "V").toUpperCase();
+
+  const submit = async (e) => {
+    e.preventDefault(); setErr(null); setOk(false); setBusy(true);
+    try { await api.changePassword(cur, next); setOk(true); setCur(""); setNext(""); setOpen(false); }
+    catch (x) { setErr({ field: x.field, text: x.message }); }
+    setBusy(false);
+  };
+  const inp = (bad) => `h-11 w-full rounded-xl border bg-well px-4 text-sm text-ink ${bad ? "border-pink/70" : "border-[#2C3247]"}`;
+
+  return (
+    <section className={`${card} flex flex-col gap-5`}>
+      <CardHead icon="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" title="Account" hint="You are signed in on this device." />
+      <div className="flex items-center gap-4">
+        <span className="flex h-16 w-16 flex-none items-center justify-center rounded-full bg-gradient-to-br from-pink to-lav text-2xl font-extrabold text-[#1B0B17]">{initial}</span>
+        <div className="flex min-w-0 flex-col gap-1">
+          <span className="truncate text-base font-bold">{user.name}</span>
+          <span className="truncate text-sm text-mute">{user.email}</span>
+          <span className="w-fit rounded-full bg-lav/15 px-2.5 py-0.5 text-[11px] font-bold text-lav">{user.role === "owner" ? "Workspace owner" : "Member"}</span>
+        </div>
+      </div>
+
+      {ok && <p role="status" className="m-0 rounded-xl border border-mint/30 bg-mint/10 px-3.5 py-2.5 text-sm text-mint">Password changed. Your other devices were signed out.</p>}
+      {!open ? (
+        <button type="button" onClick={() => { setOpen(true); setOk(false); }} className="h-11 rounded-full border border-[#2C3247] bg-transparent text-sm font-bold text-ink">Change password</button>
+      ) : (
+        <form onSubmit={submit} className="flex flex-col gap-3">
+          <label className="flex flex-col gap-1.5 text-[13px] font-bold">Current password
+            <input type="password" value={cur} onChange={(e) => setCur(e.target.value)} autoComplete="current-password" required className={inp(err?.field === "current")} />
+          </label>
+          <label className="flex flex-col gap-1.5 text-[13px] font-bold">New password
+            <input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" minLength={8} required className={inp(err?.field === "next")} />
+            <span className="text-xs font-normal text-mute">At least 8 characters, with a letter and a number.</span>
+          </label>
+          {err && <p role="alert" className="m-0 text-xs font-medium text-pink">{err.text}</p>}
+          <div className="flex gap-2">
+            <button type="submit" disabled={busy} className="h-11 flex-1 rounded-full border-0 bg-lav text-sm font-bold text-[#0B0A18] disabled:opacity-60">{busy ? "Saving…" : "Save password"}</button>
+            <button type="button" onClick={() => { setOpen(false); setErr(null); setCur(""); setNext(""); }} className="h-11 flex-1 rounded-full border border-[#2C3247] bg-transparent text-sm font-bold text-ink">Cancel</button>
+          </div>
+        </form>
+      )}
+      <button type="button" disabled={out} onClick={async () => { setOut(true); await onSignOut(); }} className="h-11 rounded-full border border-pink/40 bg-transparent text-sm font-bold text-pink hover:bg-pink/10 disabled:opacity-60">{out ? "Signing out…" : "Sign out"}</button>
+    </section>
+  );
+}
+
+export function Settings({ job, user, onSignOut, onChanged, onError, onNew }) {
   const [voices, setVoices] = useState([]);
   const [mine, setMine] = useState([]);
   const [status, setStatus] = useState(null);
@@ -229,8 +284,6 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
   const change = async (speaker, voice, consent) => {
     try { setMine(await api.setVoices(job.id, consent ? { [speaker]: voice, cloneConsent: true } : { [speaker]: voice })); onChanged(); } catch (e) { onError(e.message); }
   };
-  const initial = (name.trim()[0] || "V").toUpperCase();
-
   return (
     <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-6 max-xl:grid-cols-1">
       <div className="flex flex-col gap-6">
@@ -277,16 +330,7 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
       </div>
 
       <div className="flex flex-col gap-6">
-        <section className={`${card} flex flex-col gap-5`}>
-          <CardHead icon="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" title="Profile" hint="Stored only in this browser." />
-          <div className="flex items-center gap-4">
-            <span className="flex h-16 w-16 flex-none items-center justify-center rounded-full bg-gradient-to-br from-pink to-lav text-2xl font-extrabold text-[#1B0B17]">{initial}</span>
-            <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-[13px] text-mute">Display name
-              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="Your name"
-                className="h-11 rounded-xl border border-[#2C3247] bg-well px-4 text-sm text-ink placeholder:text-[#6B7390]" />
-            </label>
-          </div>
-        </section>
+        <AccountCard user={user} onSignOut={onSignOut} />
 
         <section className={`${card} flex flex-col gap-4`}>
           <CardHead icon="M5 12.5l4.5 4.5L19 7.5" title="Connections" hint="Which services are set up in your .env file." />

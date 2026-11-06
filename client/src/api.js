@@ -1,7 +1,10 @@
 // Thin wrapper around the backend REST API. Every call throws Error(message) on failure.
+// If the server says the session has ended, tell the app so it can show the sign-in page.
+const signedOut = (res, body) => { if (res.status === 401 && body?.code === "UNAUTHENTICATED") window.dispatchEvent(new Event("vaani:signed-out")); };
 async function handle(res) {
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+  signedOut(res, body);
+  if (!res.ok) { const e = new Error(body.error || `Request failed (${res.status})`); e.status = res.status; e.field = body.field; e.data = body; throw e; }
   return body;
 }
 const json = (method, body) => ({ method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
@@ -20,7 +23,13 @@ export const api = {
   edit: (id, lang, lineId, text) => fetch(`${L(id, lang)}/lines/${lineId}`, json("PATCH", { text })).then(handle),
   render: (id, lang) => fetch(`${L(id, lang)}/render`, { method: "POST" }).then(handle),
   rename: (id, title) => fetch(`/api/jobs/${id}`, json("PATCH", { title })).then(handle),
-  remove: (id) => fetch(`/api/jobs/${id}`, { method: "DELETE" }).then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "Could not delete"); }),
+  remove: (id) => fetch(`/api/jobs/${id}`, { method: "DELETE" }).then(async (r) => { if (!r.ok) { const b = await r.json().catch(() => ({})); signedOut(r, b); throw new Error(b.error || "Could not delete"); } }),
+  // ---- accounts ----
+  me: () => fetch("/api/auth/me").then(handle),
+  login: (email, password, remember) => fetch("/api/auth/login", json("POST", { email, password, remember })).then(handle),
+  signup: (name, email, password, remember) => fetch("/api/auth/signup", json("POST", { name, email, password, remember })).then(handle),
+  logout: () => fetch("/api/auth/logout", { method: "POST" }).then(handle),
+  changePassword: (current, next) => fetch("/api/auth/password", json("PATCH", { current, next })).then(handle),
   status: () => fetch("/api/status").then(handle),
   thumbUrl: (id) => `/api/jobs/${id}/thumb`,
   sample: () => fetch("/api/samples", { method: "POST" }).then(handle),
