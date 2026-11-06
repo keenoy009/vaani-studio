@@ -1,5 +1,6 @@
-import { useEffect, useImperativeHandle, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { api, fmt } from "../api.js";
+import { chunkText, rowAt } from "../subtitles.js";
 
 const BARS = [10, 18, 26, 14, 30, 20, 12, 28, 22, 16, 30, 12, 24, 14];
 const ORB = [
@@ -35,8 +36,12 @@ export default function Player({ ref, job, langId, L, mode, setMode, dubVer, onT
   useEffect(() => { setT(0); }, [job.id]);
 
   const speakers = [...new Set(job.segments.map((s) => s.speaker))].sort((a, b) => a - b);
-  const active = L.lines.find((l) => t >= l.start && t <= l.end);
-  const subtitle = active ? (dub ? active.text : active.source_text) : "";
+  // The line being spoken right now. In the dubbed video the speech can run slightly past the original slot.
+  const spanOf = (l) => (dub && l.fit_seconds ? l.fit_seconds : l.end - l.start);
+  const active = [...L.lines].reverse().find((l) => t >= l.start && t <= l.start + spanOf(l));
+  // Movie-style: a long line is split into short rows; show only the row for this moment.
+  const rows = useMemo(() => (active ? chunkText(dub ? active.text : active.source_text) : []), [active?.id, active?.text, dub]);
+  const subtitle = active ? rowAt(rows, active.start, spanOf(active), t) : "";
   const label = dub ? `${job.source === "hi" ? "Hindi" : "English"} → ${langId.toUpperCase()}` : "Original";
 
   return (
@@ -68,7 +73,7 @@ export default function Player({ ref, job, langId, L, mode, setMode, dubVer, onT
           </div>
         </div>
 
-        <div className="absolute right-4 bottom-[92px] left-4 z-[2] flex items-end justify-center gap-8">
+        <div className="pointer-events-none absolute right-4 bottom-[70px] left-4 z-[2] flex items-end justify-center gap-8">
           {speakers.map((sp, i) => {
             const o = ORB[i % ORB.length];
             const on = active?.speaker === sp;
@@ -83,8 +88,14 @@ export default function Player({ ref, job, langId, L, mode, setMode, dubVer, onT
           })}
         </div>
 
-        <div className="absolute right-4 bottom-4 left-4 z-[2] flex min-h-[58px] items-center justify-center rounded-[18px] border border-white/10 bg-[#07080C]/70 px-5 py-3 text-center text-xl leading-snug font-semibold tracking-[-0.01em]" aria-live="polite">
-          {subtitle || <span className="text-sm font-normal text-mute">No speech at this moment</span>}
+        {/* Transparent, single-row subtitles like a movie: white text with a soft dark outline, no box. */}
+        <div className="pointer-events-none absolute right-6 bottom-5 left-6 z-[2] flex h-9 items-end justify-center" aria-live="polite">
+          {subtitle && (
+            <span key={subtitle} className="max-w-full truncate text-center text-[22px] leading-9 font-semibold whitespace-nowrap text-white max-sm:text-[17px]"
+              style={{ textShadow: "0 0 3px #000, 0 0 6px rgba(0,0,0,0.85), 0 1px 3px rgba(0,0,0,0.95), 1px 1px 0 rgba(0,0,0,0.9), -1px -1px 0 rgba(0,0,0,0.9), 1px -1px 0 rgba(0,0,0,0.9), -1px 1px 0 rgba(0,0,0,0.9)" }}>
+              {subtitle}
+            </span>
+          )}
         </div>
       </div>
 
