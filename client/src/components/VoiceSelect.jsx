@@ -1,6 +1,8 @@
 import { useState } from "react";
 
-// Voice choice for ONE speaker: "Match original speaker" (voice cloning) or a ready-made studio voice.
+// Voice choice for ONE speaker. Two kinds of voice, both always available:
+//   - "Match original speaker": copies the speaker's own voice (voice cloning)
+//   - the studio voices, each shown with its name, gender AND the way it speaks (warm, energetic, ...)
 // Cloning copies a real person's voice, so the first time it is picked we ask the user to confirm they have permission.
 export default function VoiceSelect({ m, voices, disabled, onChange, label }) {
   const [asking, setAsking] = useState(false);
@@ -9,6 +11,7 @@ export default function VoiceSelect({ m, voices, disabled, onChange, label }) {
     setAsking(false);
     onChange(m.speaker, value, false);
   };
+  const preset = voices.find((v) => v.name === m.voice);
   return (
     <div className="flex flex-col gap-2">
       <select aria-label={label} value={asking ? "clone" : m.voice} disabled={disabled} onChange={(e) => pick(e.target.value)}
@@ -17,7 +20,7 @@ export default function VoiceSelect({ m, voices, disabled, onChange, label }) {
           Match original speaker{m.canClone ? "" : ` (needs 5 s of speech, has ${m.speechSeconds} s)`}
         </option>
         <optgroup label="Studio voices">
-          {voices.map((v) => <option key={v.name} value={v.name}>{v.name} · {v.gender}</option>)}
+          {voices.map((v) => <option key={v.name} value={v.name}>{v.name} · {v.gender} · {v.persona}</option>)}
         </optgroup>
       </select>
       {asking && (
@@ -33,7 +36,8 @@ export default function VoiceSelect({ m, voices, disabled, onChange, label }) {
           </div>
         </div>
       )}
-      {m.voice === "clone" && !asking && <span className="text-[11px] leading-relaxed text-mute">Copied from {m.speechSeconds} s of this speaker’s own speech in the video.</span>}
+      {!asking && m.voice === "clone" && <span className="text-[12px] leading-relaxed text-mute">Original voice, copied from {m.speechSeconds} s of this speaker’s own speech in the video.</span>}
+      {!asking && preset && <span className="text-[12px] leading-relaxed text-mute">{preset.gender} voice · {preset.persona}</span>}
     </div>
   );
 }

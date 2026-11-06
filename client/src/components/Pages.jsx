@@ -46,23 +46,20 @@ const LANG_STYLE = {
   failed: ["rgba(255,166,231,0.14)", "#FFA6E7", "Failed"],
 };
 
-// A colourful generated cover, so a card never looks empty. Colours and bars come from the video's id,
-// so every video keeps its own look.
-const PALETTES = [["#8B7BFF", "#FFA6E7"], ["#FFA6E7", "#FFB68F"], ["#6EE7B7", "#8B7BFF"], ["#FFB68F", "#8B7BFF"], ["#6EE7B7", "#FFA6E7"]];
-const hash = (s) => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
-
-function Cover({ id, name }) {
-  const h = hash(id);
-  const [a, b] = PALETTES[h % PALETTES.length];
-  const bars = Array.from({ length: 30 }, (_, i) => 22 + (((h >>> (i % 17)) ^ (i * 13)) % 72));
-  const letter = ([...name.trim()][0] || "V").toUpperCase();
+// The ONE default thumbnail, identical for every card, used only when a video has no frame to show
+// (file missing or unreadable) and while a real frame is loading. Same palette as the rest of the interface.
+const DEFAULT_BARS = [30, 52, 40, 68, 50, 82, 60, 94, 70, 100, 76, 90, 62, 84, 56, 72, 46, 60, 36, 50, 30, 40];
+function Cover() {
   return (
-    <div className="absolute inset-0 overflow-hidden" style={{ background: `radial-gradient(300px 170px at 8% 0%, ${a}70, transparent 65%), radial-gradient(300px 190px at 100% 100%, ${b}60, transparent 65%), #12142A` }}>
-      <div className="absolute inset-x-6 bottom-4 flex h-[42%] items-end justify-center gap-[3px]" aria-hidden="true">
-        {bars.map((v, i) => <i key={i} className="block w-[5px] rounded-full opacity-60" style={{ height: `${v}%`, background: `linear-gradient(${a}, ${b})` }} />)}
+    <div className="absolute inset-0 overflow-hidden" aria-hidden="true"
+      style={{ background: "radial-gradient(300px 170px at 8% 0%, rgba(139,123,255,0.42), transparent 65%), radial-gradient(300px 190px at 100% 100%, rgba(255,166,231,0.30), transparent 65%), #12142A" }}>
+      <div className="absolute inset-x-8 bottom-4 flex h-[38%] items-end justify-center gap-[3px]">
+        {DEFAULT_BARS.map((v, i) => <i key={i} className="block w-[5px] rounded-full opacity-45" style={{ height: `${v}%`, background: "linear-gradient(#A99BFF, #FFA6E7)" }} />)}
       </div>
-      <div className="absolute inset-0 flex items-center justify-center pb-6">
-        <span className="flex h-[68px] w-[68px] items-center justify-center rounded-full text-[30px] font-extrabold text-[#0B0A18] shadow-[0_0_40px_rgba(169,155,255,0.35)]" style={{ background: `linear-gradient(145deg, ${a}, ${b})` }}>{letter}</span>
+      <div className="absolute inset-0 flex items-center justify-center pb-7">
+        <span className="flex h-[64px] w-[64px] items-center justify-center rounded-full border border-white/15 bg-white/10 text-[#E9E5FF] shadow-[0_0_40px_rgba(169,155,255,0.30)] backdrop-blur-sm">
+          <Icon d="M5 4.5v15l13-7.5z" size={26} />
+        </span>
       </div>
     </div>
   );
@@ -70,11 +67,11 @@ function Cover({ id, name }) {
 
 // Shows a real frame from the video (taken from the middle, by the server). The generated cover is
 // only used for a video that has no frame at all (file missing or unreadable), and while the image loads.
-function Thumb({ id, name }) {
+function Thumb({ id }) {
   const [state, setState] = useState("loading"); // loading | photo | cover
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-[#12142A]">
-      {state !== "photo" && <Cover id={id} name={name} />}
+      {state !== "photo" && <Cover />}
       {/* Kept on the page (just transparent) while loading: browsers never download lazy images that are display:none. */}
       {state !== "cover" && <img src={api.thumbUrl(id)} alt="" loading="lazy" onLoad={() => setState("photo")} onError={() => setState("cover")}
         className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${state === "photo" ? "opacity-100" : "opacity-0"}`} />}
@@ -154,7 +151,7 @@ export function Library({ onOpen, currentId, onNew, onChanged, onDeleted }) {
           return (
             <article key={r.id} className="group flex flex-col gap-4 rounded-[26px] border bg-panel p-3.5 transition-colors hover:border-lav/60" style={{ borderColor: r.id === currentId ? "#A99BFF" : "#1E2232" }}>
               <div className="relative">
-                <Thumb id={r.id} name={name} />
+                <Thumb id={r.id} />
                 {r.duration != null && <span className="absolute right-2.5 bottom-2.5 rounded-lg bg-[#07080C]/75 px-2 py-1 font-mono text-[11px] font-medium">{fmt(r.duration)}</span>}
                 {r.id === currentId && <span className="absolute top-2.5 left-2.5 rounded-full bg-lav px-2.5 py-1 text-[11px] font-bold text-[#0B0A18]">Open now</span>}
                 <button type="button" aria-label={`Delete ${name}`} title="Delete" onClick={() => { setConfirming(r.id); setMsg(null); }}
@@ -248,12 +245,11 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
           {job && mine.length === 0 && <p className="m-0 text-sm text-mute">No speakers found yet.</p>}
           <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1">
             {mine.map((m, i) => {
-              const v = voices.find((x) => x.name === m.voice);
               return (
                 <div key={m.speaker} className="flex flex-col gap-3.5 rounded-[20px] border border-line bg-well p-4">
                   <div className="flex items-center gap-3">
                     <span className="flex h-11 w-11 flex-none items-center justify-center rounded-full text-sm font-extrabold text-[#0B0A18]" style={{ background: ORBS[i % 4] }}>S{i + 1}</span>
-                    <div className="flex flex-col"><span className="text-[15px] font-bold">{m.label}</span><span className="text-xs text-mute">{v ? `${v.gender} · ${v.persona}` : ""}</span></div>
+                    <div className="flex flex-col"><span className="text-[15px] font-bold">{m.label}</span><span className="text-xs text-mute">{m.speechSeconds} s of speech</span></div>
                   </div>
                   <VoiceSelect m={m} voices={voices} onChange={change} label={`Voice for ${m.label}`} />
                 </div>

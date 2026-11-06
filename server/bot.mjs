@@ -45,9 +45,15 @@ function upsertViewer(key, patch) {
 }
 
 // ---------- voice choices ----------
-const VOICE_CHOICES = [["Shivani", "👩"], ["Lakshmi", "👩"], ["Riyaa", "👩"], ["Avinash", "👨"], ["Devansh", "👨"], ["Prakash", "👨"]];
+// [name, icon, how the voice speaks]  (from Gnani's voice catalogue)
+const VOICE_CHOICES = [
+  ["Shivani", "👩", "warm, empathetic"], ["Lakshmi", "👩", "expressive, energetic"], ["Riyaa", "👩", "confident, authoritative"],
+  ["Avinash", "👨", "professional"], ["Devansh", "👨", "conversational"], ["Prakash", "👨", "professional"],
+];
 const VOICE_IDS = ["clone", "default", ...VOICE_CHOICES.map(([n]) => n)];
-const VOICE_NOTE = "Which voice should the dub use?\n\n“Match original voice” copies each speaker's real voice, so only choose it if you have the speakers' permission.";
+const VOICE_NOTE = "Which voice should the dub use?\n\n" +
+  VOICE_CHOICES.map(([name, icon, style]) => `${icon} ${name}: ${style}`).join("\n") +
+  "\n\n🎙 “Match original voice” copies each speaker's real voice, so only choose it if you have the speakers' permission.";
 function voiceKeyboard(prefix) {
   const kb = new InlineKeyboard().text("🎙 Match original voice (I have permission)", `${prefix}:clone`).row().text("Default voices", `${prefix}:default`).row();
   VOICE_CHOICES.forEach(([name, icon], i) => { kb.text(`${icon} ${name}`, `${prefix}:${name}`); if (i % 3 === 2) kb.row(); });
