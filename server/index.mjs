@@ -12,6 +12,7 @@ import { existsSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
 import { extractAudio, transcribe, translate, voiceLine, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
 import { duration, tts } from "../src/tts.mjs";
+import { startBot, telegramState, sendDub } from "./bot.mjs";
 import { execFileSync } from "node:child_process";
 
 const PORT = process.env.PORT || 3001;
@@ -345,26 +346,33 @@ app.get("/api/status", async (req, res) => {
   res.json({
     gnani: !!process.env.GNANI_API_KEY,
     llm: !!process.env.LLM_API_KEY, llmModel: process.env.LLM_MODEL || "gemini-3.5-flash-lite",
-    telegramToken: !!process.env.TELEGRAM_BOT_TOKEN, telegramOnline: !!tg.online,
+    telegramToken: !!process.env.TELEGRAM_BOT_TOKEN, telegramOnline: !!tg.online, telegramBot: tg.botUsername ?? null,
     limits: { maxMinutes: 5, maxMB: 200 },
   });
 });
 
-// ---------- Telegram (status is read from work/telegram.json, which the bot will write) ----------
-const TG_FILE = resolve("work/telegram.json");
-async function tgState() {
-  try { return JSON.parse(await readFile(TG_FILE, "utf8")); } catch { return { online: false, groups: [], viewers: [] }; }
-}
+// ---------- Telegram (the bot lives in server/bot.mjs and keeps its own state) ----------
+const tgState = async () => telegramState();
 app.get("/api/telegram", async (req, res) => res.json(await tgState()));
 
 // Send a finished dub to a Telegram group. Only a rendered, up-to-date dub can be sent (enforced here, not only in the UI).
+// Body: { groupId }  (one of the groups from GET /api/telegram)
 app.post("/api/jobs/:id/langs/:lang/send", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
   const L = getLang(req, res, job); if (!L) return;
   if (!L.dubbed) return res.status(409).json({ error: "The dub is not ready yet" });
   const tg = await tgState();
-  if (!tg.online) return res.status(501).json({ error: "The Telegram bot is not set up yet." });
-  res.status(501).json({ error: "Sending is not implemented yet." });
+  if (!tg.online) return res.status(503).json({ error: "The Telegram bot is not running. Check TELEGRAM_BOT_TOKEN in .env and restart the server." });
+  const group = tg.groups.find((g) => String(g.id) === String(req.body?.groupId));
+  if (!group) return res.status(400).json({ error: "Choose a group the bot has been added to." });
+  const name = job.title || job.originalName.replace(/\.[^.]+$/, "").replace(/_+/g, " ");
+  try {
+    await sendDub(Number(group.id), join(jobDir(job.id), TARGETS[req.params.lang].code, "dubbed.mp4"), `${name} · dubbed into ${TARGETS[req.params.lang].name}`);
+    res.json({ ok: true, group: group.name });
+  } catch (e) {
+    const m = String(e.description || e.message || e);
+    res.status(502).json({ error: /kicked|not a member|chat not found|forbidden/i.test(m) ? "The bot can no longer post in that group. Add it again and retry." : `Telegram could not send it: ${m.slice(0, 160)}` });
+  }
 });
 
 // Basic error handler (e.g. upload too large)
@@ -374,4 +382,8 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: "Server error" });
 });
 
-app.listen(PORT, () => console.log(`Vaani Studio API on http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`Vaani Studio API on http://localhost:${PORT}`);
+  if (process.env.TELEGRAM_BOT_TOKEN) startBot({ token: process.env.TELEGRAM_BOT_TOKEN, apiBase: `http://localhost:${PORT}` });
+  else console.log("[bot] TELEGRAM_BOT_TOKEN is not set, so the Telegram bot is off.");
+});

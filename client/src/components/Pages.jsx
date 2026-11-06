@@ -336,8 +336,22 @@ export function BotPage({ tg }) {
           <ol className="m-0 flex list-decimal flex-col gap-2 pl-5 text-sm leading-relaxed text-mute">
             <li>In Telegram, talk to <b className="text-ink">@BotFather</b> and send <code>/newbot</code>.</li>
             <li>Put the token it gives you in <code>.env</code> as <code>TELEGRAM_BOT_TOKEN=…</code>. Never share it.</li>
-            <li>The bot itself is the next thing being built; it will start with the server.</li>
+            <li>Restart the server (<code>npm start</code>). The bot starts together with it.</li>
           </ol>
+        )}
+        {tg.online && (
+          <div className="flex flex-col gap-4">
+            <a href={`https://t.me/${tg.botUsername}`} target="_blank" rel="noreferrer"
+              className="flex items-center justify-between gap-3 rounded-2xl bg-lav px-5 py-4 text-[#0B0A18] no-underline">
+              <span className="flex flex-col"><span className="text-base font-extrabold">@{tg.botUsername}</span><span className="text-xs font-medium opacity-75">Open the bot in Telegram</span></span>
+              <Icon d="M5 12h14M13 6l6 6-6 6" size={20} />
+            </a>
+            <ol className="m-0 flex list-decimal flex-col gap-2 pl-5 text-sm leading-relaxed text-mute">
+              <li>Send the bot a video (up to 5 minutes and 20 MB).</li>
+              <li>Pick the spoken language, then the language to dub into.</li>
+              <li>You get the dubbed video back, with <b className="text-ink">Share to group</b> and <b className="text-ink">Change language</b> buttons.</li>
+            </ol>
+          </div>
         )}
       </section>
       <section className={`${card} flex flex-col gap-3`}>

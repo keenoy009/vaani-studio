@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../api.js";
 
 const VIEWER_COLORS = ["#A99BFF", "#FFA6E7", "#FFB68F", "#6EE7B7"];
-const CHIP = { Done: ["rgba(110,231,183,0.14)", "#6EE7B7"], Dubbing: ["rgba(169,155,255,0.16)", "#A99BFF"], Waiting: ["#232738", "#9AA3B8"] };
+const CHIP = { Done: ["rgba(110,231,183,0.14)", "#6EE7B7"], Dubbing: ["rgba(169,155,255,0.16)", "#A99BFF"], Waiting: ["#232738", "#9AA3B8"], Failed: ["rgba(255,166,231,0.14)", "#FFA6E7"] };
 
 // Reads bot status/groups/viewers from GET /api/telegram. The bot (not built yet) will fill them in:
 //   { online: bool, groups: [{id, name, members}], viewers: [{name, what, state: "Waiting"|"Dubbing"|"Done"}] }
@@ -49,7 +49,7 @@ export default function Telegram({ job, langId, L, tg, onError }) {
 
   const send = async () => {
     setSending(true); setSentMsg("");
-    try { await api.send(job.id, langId); setSentMsg("Sent ✓"); } catch (e) { onError(e.message); }
+    try { await api.send(job.id, langId, g.id); setSentMsg(`Sent to ${g.name} ✓`); } catch (e) { onError(e.message); }
     setSending(false);
   };
 
@@ -78,7 +78,9 @@ export default function Telegram({ job, langId, L, tg, onError }) {
         </div>
       ) : (
         <div className="rounded-[20px] border border-dashed border-[#343A55] p-4 text-sm leading-relaxed text-mute">
-          No group linked yet. Once the bot is added to a Telegram group, it will show up here.
+          No group linked yet. {tg.botUsername
+            ? <>Add the bot to a Telegram group and it will show up here. <a className="font-bold text-lav" href={`https://t.me/${tg.botUsername}?startgroup=true`} target="_blank" rel="noreferrer">Add @{tg.botUsername} to a group</a></>
+            : "Once the bot is added to a Telegram group, it will show up here."}
         </div>
       )}
 

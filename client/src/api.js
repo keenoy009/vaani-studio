@@ -29,7 +29,7 @@ export const api = {
   jobVoices: (id) => fetch(`/api/jobs/${id}/voices`).then(handle),
   setVoices: (id, body) => fetch(`/api/jobs/${id}/voices`, json("PUT", body)).then(handle),
   telegram: () => fetch("/api/telegram").then(handle),
-  send: (id, lang) => fetch(`${L(id, lang)}/send`, { method: "POST" }).then(handle),
+  send: (id, lang, groupId) => fetch(`${L(id, lang)}/send`, json("POST", { groupId })).then(handle),
   originalUrl: (id) => `/api/jobs/${id}/video`,
   dubUrl: (id, lang, v = 0) => `${L(id, lang)}/video?v=${v}`,
   downloadUrl: (id, lang) => `${L(id, lang)}/video?download=1`,
