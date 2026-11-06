@@ -17,6 +17,11 @@ export default function Upload({ onUpload, onSample }) {
     if (!OK.test(f.name)) { setMsg("Please choose a video file: MP4, MOV, MKV, WEBM or M4V."); return; }
     setMsg(""); setFile(f);
   };
+  // A video can't be dubbed into the language it is already spoken in.
+  const pickSource = (id) => {
+    setSource(id);
+    setTargets((t) => { const rest = t.filter((x) => x !== id); return rest.length ? rest : [LANGS.find((l) => l.id !== id).id]; });
+  };
   const toggle = (id) => setTargets((t) => (t.includes(id) ? (t.length > 1 ? t.filter((x) => x !== id) : t) : [...t, id]));
   const go = async () => { setBusy(true); await onUpload(file, source, targets); setBusy(false); };
 
@@ -34,7 +39,7 @@ export default function Upload({ onUpload, onSample }) {
         <div className="flex flex-col gap-2">
           <span className="text-[30px] font-extrabold tracking-[-0.02em]">{file ? file.name : "Drop your video here"}</span>
           <span className="text-sm text-mute">
-            {file ? `${(file.size / 1048576).toFixed(1)} MB` : "Hindi or English · up to about 5 minutes · MP4, MOV, MKV, WEBM"}
+            {file ? `${(file.size / 1048576).toFixed(1)} MB` : "Up to about 5 minutes · MP4, MOV, MKV, WEBM"}
           </span>
         </div>
 
@@ -45,16 +50,15 @@ export default function Upload({ onUpload, onSample }) {
 
         <div className="flex flex-wrap items-center justify-center gap-2">
           <span className="text-[13px] text-mute">Spoken language</span>
-          {Object.entries(SOURCES).map(([id, name]) => (
-            <button key={id} type="button" aria-pressed={source === id} onClick={() => setSource(id)}
-              className="h-[34px] rounded-full px-4 text-[13px] font-semibold"
-              style={{ border: `1px solid ${source === id ? "#A99BFF" : "#262B40"}`, background: source === id ? "rgba(169,155,255,0.16)" : "#171A25", color: "#F1F3FA" }}>{name}</button>
-          ))}
+          <select aria-label="Spoken language" value={source} onChange={(e) => pickSource(e.target.value)}
+            className="h-[38px] rounded-full border border-lav bg-lav/15 px-4 text-[13px] font-semibold text-ink">
+            {Object.entries(SOURCES).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+          </select>
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2">
           <span className="text-[13px] text-mute">Dub into</span>
-          {LANGS.map((l) => {
+          {LANGS.filter((l) => l.id !== source).map((l) => {
             const on = targets.includes(l.id);
             return (
               <button key={l.id} type="button" aria-pressed={on} onClick={() => toggle(l.id)}

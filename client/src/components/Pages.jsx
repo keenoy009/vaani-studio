@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, LANGS, SOURCES, fmt } from "../api.js";
+import { api, LANGS, SOURCES, displayName, fmt } from "../api.js";
 import { Viewers } from "./Telegram.jsx";
 
 const card = "rounded-[28px] border border-line bg-panel p-6";
@@ -45,25 +45,77 @@ const LANG_STYLE = {
   failed: ["rgba(255,166,231,0.14)", "#FFA6E7", "Failed"],
 };
 
-function Thumb({ id }) {
-  const [bad, setBad] = useState(false);
+// A colourful generated cover, so a card never looks empty. Colours and bars come from the video's id,
+// so every video keeps its own look.
+const PALETTES = [["#8B7BFF", "#FFA6E7"], ["#FFA6E7", "#FFB68F"], ["#6EE7B7", "#8B7BFF"], ["#FFB68F", "#8B7BFF"], ["#6EE7B7", "#FFA6E7"]];
+const hash = (s) => { let h = 7; for (const c of s) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+
+function Cover({ id, name }) {
+  const h = hash(id);
+  const [a, b] = PALETTES[h % PALETTES.length];
+  const bars = Array.from({ length: 30 }, (_, i) => 22 + (((h >>> (i % 17)) ^ (i * 13)) % 72));
+  const letter = ([...name.trim()][0] || "V").toUpperCase();
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-[#12142A]"
-      style={{ backgroundImage: "radial-gradient(300px 160px at 15% 0%, rgba(139,123,255,0.45), transparent 65%), radial-gradient(300px 180px at 95% 100%, rgba(255,166,231,0.30), transparent 65%)" }}>
-      {!bad && <img src={api.thumbUrl(id)} alt="" loading="lazy" onError={() => setBad(true)} className="absolute inset-0 h-full w-full object-cover" />}
-      {bad && <div className="absolute inset-0 flex items-center justify-center text-lav/60"><Icon d="M5 4.5v15l13-7.5z" size={34} /></div>}
+    <div className="absolute inset-0 overflow-hidden" style={{ background: `radial-gradient(300px 170px at 8% 0%, ${a}70, transparent 65%), radial-gradient(300px 190px at 100% 100%, ${b}60, transparent 65%), #12142A` }}>
+      <div className="absolute inset-x-6 bottom-4 flex h-[42%] items-end justify-center gap-[3px]" aria-hidden="true">
+        {bars.map((v, i) => <i key={i} className="block w-[5px] rounded-full opacity-60" style={{ height: `${v}%`, background: `linear-gradient(${a}, ${b})` }} />)}
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center pb-6">
+        <span className="flex h-[68px] w-[68px] items-center justify-center rounded-full text-[30px] font-extrabold text-[#0B0A18] shadow-[0_0_40px_rgba(169,155,255,0.35)]" style={{ background: `linear-gradient(145deg, ${a}, ${b})` }}>{letter}</span>
+      </div>
     </div>
   );
 }
 
-export function Library({ onOpen, currentId, onNew }) {
+// Shows the video's first frame. If it fails to load, or the frame is basically one flat colour (like our made-up samples), show the generated cover.
+function Thumb({ id, name }) {
+  const [state, setState] = useState("loading"); // loading | photo | cover
+  const check = (e) => {
+    try {
+      const c = document.createElement("canvas"); c.width = 32; c.height = 18;
+      const x = c.getContext("2d"); x.drawImage(e.currentTarget, 0, 0, 32, 18);
+      const d = x.getImageData(0, 0, 32, 18).data;
+      let sum = 0, sq = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; sum += y; sq += y * y; n++; }
+      setState(Math.sqrt(Math.max(0, sq / n - (sum / n) ** 2)) < 6 ? "cover" : "photo");
+    } catch { setState("photo"); }
+  };
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-[18px] bg-[#12142A]">
+      {state !== "photo" && <Cover id={id} name={name} />}
+      {state !== "cover" && <img src={api.thumbUrl(id)} alt="" loading="lazy" onLoad={check} onError={() => setState("cover")} className={state === "photo" ? "absolute inset-0 h-full w-full object-cover" : "hidden"} />}
+    </div>
+  );
+}
+
+export function Library({ onOpen, currentId, onNew, onChanged, onDeleted }) {
   const [rows, setRows] = useState(null);
   const [filter, setFilter] = useState("all");
   const [q, setQ] = useState("");
+  const [editing, setEditing] = useState(null); // id being renamed
+  const [draft, setDraft] = useState("");
+  const [confirming, setConfirming] = useState(null); // id awaiting delete confirmation
+  const [busyId, setBusyId] = useState(null);
+  const [msg, setMsg] = useState(null); // { id, text }
   useEffect(() => { api.list().then(setRows).catch(() => setRows([])); }, []);
 
-  const shown = useMemo(() => (rows ?? []).filter((r) => (filter === "all" || stateOf(r) === filter) && r.originalName.toLowerCase().includes(q.trim().toLowerCase())), [rows, filter, q]);
+  const shown = useMemo(() => (rows ?? []).filter((r) => (filter === "all" || stateOf(r) === filter) && displayName(r).toLowerCase().includes(q.trim().toLowerCase())), [rows, filter, q]);
   if (!rows) return <p className="text-mute">Loading…</p>;
+
+  const startRename = (r) => { setEditing(r.id); setDraft(displayName(r)); setMsg(null); };
+  const saveName = async (r) => {
+    const title = draft.trim();
+    setEditing(null);
+    if (!title || title === displayName(r)) return;
+    try { await api.rename(r.id, title); setRows((rs) => rs.map((x) => (x.id === r.id ? { ...x, title } : x))); onChanged?.(); }
+    catch (e) { setMsg({ id: r.id, text: e.message }); }
+  };
+  const remove = async (r) => {
+    setBusyId(r.id);
+    try { await api.remove(r.id); setRows((rs) => rs.filter((x) => x.id !== r.id)); if (r.id === currentId) onDeleted?.(); }
+    catch (e) { setMsg({ id: r.id, text: e.message }); }
+    setBusyId(null); setConfirming(null);
+  };
 
   const dubs = rows.reduce((n, r) => n + Object.values(r.langs).filter((l) => l.dubbed).length, 0);
   const langsUsed = new Set(rows.flatMap((r) => Object.keys(r.langs))).size;
@@ -102,28 +154,63 @@ export function Library({ onOpen, currentId, onNew }) {
       {rows.length > 0 && shown.length === 0 && <p className="m-0 py-8 text-center text-mute">Nothing matches that filter.</p>}
 
       <div className="grid grid-cols-3 gap-5 max-xl:grid-cols-2 max-md:grid-cols-1">
-        {shown.map((r) => (
-          <article key={r.id} className="group flex flex-col gap-4 rounded-[26px] border bg-panel p-3.5 transition-colors hover:border-lav/60" style={{ borderColor: r.id === currentId ? "#A99BFF" : "#1E2232" }}>
-            <div className="relative">
-              <Thumb id={r.id} />
-              {r.duration != null && <span className="absolute right-2.5 bottom-2.5 rounded-lg bg-[#07080C]/75 px-2 py-1 font-mono text-[11px] font-medium">{fmt(r.duration)}</span>}
-              {r.id === currentId && <span className="absolute top-2.5 left-2.5 rounded-full bg-lav px-2.5 py-1 text-[11px] font-bold text-[#0B0A18]">Open now</span>}
-            </div>
-            <div className="flex flex-col gap-1 px-1.5">
-              <span className="truncate text-base font-bold" title={r.originalName}>{r.originalName}</span>
-              <span className="text-[13px] text-mute">{SOURCES[r.source]} · {ago(r.createdAt)}</span>
-            </div>
-            <div className="flex min-h-[28px] flex-wrap gap-1.5 px-1.5">
-              {r.status === "processing" && <span className="rounded-full bg-lav/15 px-2.5 py-1 text-[11px] font-bold text-lav">Processing…</span>}
-              {r.status === "failed" && <span className="rounded-full bg-pink/15 px-2.5 py-1 text-[11px] font-bold text-pink">Failed</span>}
-              {Object.entries(r.langs).map(([k, v]) => {
-                const [bg, fg, label] = v.dubbed ? LANG_STYLE.done : LANG_STYLE[v.status] || LANG_STYLE.review;
-                return <span key={k} className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: bg, color: fg }}>{LANGS.find((l) => l.id === k)?.name} · {label}</span>;
-              })}
-            </div>
-            <button type="button" onClick={() => onOpen(r.id)} className="mx-1.5 mb-1 h-11 rounded-full border border-[#2C3247] bg-transparent text-sm font-bold text-ink group-hover:border-lav group-hover:text-lav">Open in Studio</button>
-          </article>
-        ))}
+        {shown.map((r) => {
+          const name = displayName(r);
+          const asking = confirming === r.id;
+          return (
+            <article key={r.id} className="group flex flex-col gap-4 rounded-[26px] border bg-panel p-3.5 transition-colors hover:border-lav/60" style={{ borderColor: r.id === currentId ? "#A99BFF" : "#1E2232" }}>
+              <div className="relative">
+                <Thumb id={r.id} name={name} />
+                {r.duration != null && <span className="absolute right-2.5 bottom-2.5 rounded-lg bg-[#07080C]/75 px-2 py-1 font-mono text-[11px] font-medium">{fmt(r.duration)}</span>}
+                {r.id === currentId && <span className="absolute top-2.5 left-2.5 rounded-full bg-lav px-2.5 py-1 text-[11px] font-bold text-[#0B0A18]">Open now</span>}
+                <button type="button" aria-label={`Delete ${name}`} title="Delete" onClick={() => { setConfirming(r.id); setMsg(null); }}
+                  className="absolute top-2.5 right-2.5 flex h-9 w-9 items-center justify-center rounded-full border-0 bg-[#07080C]/65 p-0 text-ink hover:text-pink">
+                  <Icon d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3" size={17} />
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1 px-1.5">
+                {editing === r.id ? (
+                  <input autoFocus value={draft} maxLength={80} aria-label="Video name" onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") saveName(r); if (e.key === "Escape") setEditing(null); }} onBlur={() => saveName(r)}
+                    className="h-9 w-full rounded-lg border border-lav bg-well px-3 text-base font-bold text-ink" />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-base font-bold" title={name}>{name}</span>
+                    <button type="button" aria-label={`Rename ${name}`} title="Rename" onClick={() => startRename(r)}
+                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full border-0 bg-transparent p-0 text-mute hover:bg-white/5 hover:text-ink">
+                      <Icon d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16zM13.5 6.5l4 4" size={16} />
+                    </button>
+                  </div>
+                )}
+                <span className="text-[13px] text-mute">{SOURCES[r.source]} · {ago(r.createdAt)}</span>
+              </div>
+
+              <div className="flex min-h-[28px] flex-wrap gap-1.5 px-1.5">
+                {r.status === "processing" && <span className="rounded-full bg-lav/15 px-2.5 py-1 text-[11px] font-bold text-lav">Processing…</span>}
+                {r.status === "failed" && <span className="rounded-full bg-pink/15 px-2.5 py-1 text-[11px] font-bold text-pink">Failed</span>}
+                {Object.entries(r.langs).map(([k, v]) => {
+                  const [bg, fg, label] = v.dubbed ? LANG_STYLE.done : LANG_STYLE[v.status] || LANG_STYLE.review;
+                  return <span key={k} className="rounded-full px-2.5 py-1 text-[11px] font-bold" style={{ background: bg, color: fg }}>{LANGS.find((l) => l.id === k)?.name} · {label}</span>;
+                })}
+              </div>
+
+              {msg?.id === r.id && <p role="alert" className="m-0 px-1.5 text-xs text-pink">{msg.text}</p>}
+
+              {asking ? (
+                <div className="mx-1.5 mb-1 flex flex-col gap-2.5 rounded-2xl border border-pink/40 bg-pink/10 p-3.5">
+                  <span className="text-[13px] leading-relaxed text-ink">Delete this video and all its dubs? This can’t be undone.</span>
+                  <div className="flex gap-2">
+                    <button type="button" disabled={busyId === r.id} onClick={() => remove(r)} className="h-10 flex-1 rounded-full border-0 bg-pink text-[13px] font-bold text-[#1B0B17] disabled:opacity-60">{busyId === r.id ? "Deleting…" : "Delete"}</button>
+                    <button type="button" onClick={() => setConfirming(null)} className="h-10 flex-1 rounded-full border border-[#2C3247] bg-transparent text-[13px] font-bold text-ink">Keep</button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" onClick={() => onOpen(r.id)} className="mx-1.5 mb-1 h-11 rounded-full border border-[#2C3247] bg-transparent text-sm font-bold text-ink group-hover:border-lav group-hover:text-lav">Open in Studio</button>
+              )}
+            </article>
+          );
+        })}
       </div>
     </div>
   );
@@ -157,7 +244,7 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
     <div className="grid grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-6 max-xl:grid-cols-1">
       <div className="flex flex-col gap-6">
         <section className={`${card} flex flex-col gap-5`}>
-          <CardHead icon="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3" title="Dubbed voices" hint={job ? `Pick a voice for each speaker in “${job.originalName}”.` : "Voices are chosen per speaker, for each video."} />
+          <CardHead icon="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3" title="Dubbed voices" hint={job ? `Pick a voice for each speaker in “${displayName(job)}”.` : "Voices are chosen per speaker, for each video."} />
           {!job && (
             <div className="flex flex-col items-start gap-3 rounded-2xl border border-dashed border-[#343A55] bg-well p-5">
               <span className="text-sm text-mute">No video is open yet. Open one from the Library, or start a new dub.</span>
@@ -232,7 +319,7 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
             <dt className="text-mute">Video length</dt><dd className="m-0 text-right font-semibold">up to about {status?.limits.maxMinutes ?? 5} minutes</dd>
             <dt className="text-mute">File size</dt><dd className="m-0 text-right font-semibold">up to {status?.limits.maxMB ?? 200} MB</dd>
             <dt className="text-mute">Formats</dt><dd className="m-0 text-right font-semibold">MP4, MOV, MKV, WEBM</dd>
-            <dt className="text-mute">Spoken language</dt><dd className="m-0 text-right font-semibold">Hindi, English</dd>
+            <dt className="text-mute">Spoken language</dt><dd className="m-0 text-right font-semibold">{Object.values(SOURCES).join(", ")}</dd>
             <dt className="text-mute">Dub into</dt><dd className="m-0 text-right font-semibold">{LANGS.map((l) => l.name).join(", ")}</dd>
           </dl>
         </section>

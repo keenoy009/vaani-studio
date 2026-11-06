@@ -7,6 +7,8 @@ Built for the Gnani AI "Great Indian AI Internship Challenge". Deadline: Nov 10 
 ## Decisions that changed the brief (newest wins)
 - Nov 5: The user REMOVED the approval gate. No approve buttons; clicking a language translates + voices + mixes automatically. Lines stay editable, then "Re-render". Too-long machine translations are auto-shortened (user-edited lines never are). Voice per speaker is chosen on the studio page. Original audio is fully muted (volume 0): only the dub is heard. "Send to Telegram" now only needs a finished, up-to-date dub.
 
+- Nov 6: All 10 languages are dub targets (kn, ta, te, mr, ml, bn, gu, pa, hi, en); a video can't be dubbed into its own spoken language. Spoken (STT) languages: hi, en, kn, ta, te, ml, mr, bn (gu/pa excluded: batch STT). The X/LinkedIn caption card ("Post your demo") was REMOVED by the user: not part of the project. Lip-sync stays OUT (see below). Library supports rename (display title only) and delete (confirmation; refused while a video is processing).
+
 ## Rules for you (Claude Code)
 - Guide me step by step. Small steps, run and verify each one before the next.
 - Never put API keys in code or chat. Use `.env` (gitignored) and `.env.example`.

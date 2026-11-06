@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, LANGS, SOURCES } from "./api.js";
+import { api, LANGS, SOURCES, displayName } from "./api.js";
 import Upload from "./components/Upload.jsx";
 import Processing from "./components/Processing.jsx";
 import Player from "./components/Player.jsx";
 import Timing from "./components/Timing.jsx";
 import Review from "./components/Review.jsx";
 import Telegram, { useTelegram } from "./components/Telegram.jsx";
-import Captions from "./components/Captions.jsx";
 import VoiceBar from "./components/VoiceBar.jsx";
 import { Library, Settings, BotPage } from "./components/Pages.jsx";
 
@@ -64,7 +63,7 @@ export default function App() {
   useEffect(() => {
     if (!job) return;
     const ids = Object.keys(job.langs);
-    if (ids.length && !ids.includes(lang)) setLang(ids[0]);
+    if (ids.length && !ids.includes(lang)) setLang(ids.find((id) => job.langs[id].dubbed) ?? ids[0]); // prefer one that's ready to watch
   }, [job, lang]);
 
   // Show the dubbed version as soon as one is ready; fall back to the original when the dub is cleared.
@@ -123,7 +122,7 @@ export default function App() {
           <div className="flex flex-col gap-1.5">
             <h1 className="m-0 text-[36px] leading-[1.1] font-extrabold tracking-[-0.03em] max-sm:text-[28px]">{TITLES[page]}</h1>
             <span className="text-sm text-mute">
-              {page !== "studio" ? "Vaani Studio" : job ? `${job.originalName} · ${SOURCES[job.source]}${speakerCount ? ` · ${speakerCount} speaker${speakerCount > 1 ? "s" : ""}` : ""}` : "Upload a video to start"}
+              {page !== "studio" ? "Vaani Studio" : job ? `${displayName(job)} · ${SOURCES[job.source]}${speakerCount ? ` · ${speakerCount} speaker${speakerCount > 1 ? "s" : ""}` : ""}` : "Upload a video to start"}
             </span>
           </div>
           <div className="flex items-center gap-3">
@@ -143,7 +142,7 @@ export default function App() {
           </div>
         )}
 
-        {page === "library" && <Library onOpen={open} currentId={jobId} onNew={newDub} />}
+        {page === "library" && <Library onOpen={open} currentId={jobId} onNew={newDub} onChanged={refresh} onDeleted={newDub} />}
         {page === "bot" && <BotPage tg={tg} />}
         {page === "settings" && <Settings job={job} name={name} setName={setName} onChanged={refresh} onError={setErr} onNew={newDub} />}
 
@@ -166,8 +165,8 @@ export default function App() {
                   <section className="flex flex-col gap-3.5 rounded-[28px] border border-line bg-panel p-3.5">
                     <Player ref={playerRef} job={job} langId={lang} L={L} mode={mode} setMode={setMode} dubVer={dubVer} onTime={setT} />
                     <Timing job={job} L={L} t={t} onSeek={(s) => playerRef.current?.seek(s)} />
-                    <div className="grid grid-cols-4 gap-2.5 px-0.5 pb-0.5 max-md:grid-cols-2">
-                      {LANGS.map((l) => {
+                    <div className="grid grid-cols-3 gap-2.5 px-0.5 pb-0.5 max-md:grid-cols-2">
+                      {LANGS.filter((l) => l.id !== job.source).map((l) => {
                         const data = job.langs[l.id];
                         const active = lang === l.id;
                         const label = !data ? "Click to dub" : { translating: "Translating…", review: "Needs re-render", rendering: "Voicing…", done: "Dub ready", failed: "Failed · tap to retry" }[data.status];
@@ -191,7 +190,6 @@ export default function App() {
 
                 <aside className="flex min-w-0 max-w-[420px] flex-[1_1_380px] flex-col gap-6 max-lg:max-w-none">
                   <Telegram job={job} langId={lang} L={L} tg={tg} onError={setErr} />
-                  <Captions job={job} langId={lang} L={L} />
                 </aside>
               </div>
             )}

@@ -7,7 +7,7 @@
 import express from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile, readdir, mkdir } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
 import { extractAudio, transcribe, translate, voiceLine, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
@@ -161,8 +161,9 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: `Send a video file (${[...ALLOWED_EXT].join(", ")}) in field "video".` });
   const source = req.body.source || "hi";
   const targets = (req.body.targets || "kn").split(",").map((s) => s.trim()).filter(Boolean);
-  if (!SOURCES[source]) return res.status(400).json({ error: "source must be hi or en" });
-  if (!targets.length || targets.some((t) => !TARGETS[t])) return res.status(400).json({ error: `targets must be from: ${Object.keys(TARGETS).join(", ")}` });
+  if (!SOURCES[source]) return res.status(400).json({ error: `Spoken language must be one of: ${Object.keys(SOURCES).join(", ")}` });
+  if (!targets.length || targets.some((t) => !TARGETS[t])) return res.status(400).json({ error: `Dub-into languages must be from: ${Object.keys(TARGETS).join(", ")}` });
+  if (targets.includes(source)) return res.status(400).json({ error: "A video can't be dubbed into the language it is already spoken in." });
 
   const job = {
     id: req.jobId, status: "processing", stage: "audio", error: null, source,
@@ -177,16 +178,43 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
 
 app.get("/api/jobs", (req, res) =>
   res.json([...jobs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map((j) => ({
-    id: j.id, originalName: j.originalName, status: j.status, stage: j.stage, createdAt: j.createdAt, source: j.source, duration: j.duration,
+    id: j.id, originalName: j.originalName, title: j.title ?? null, status: j.status, stage: j.stage, createdAt: j.createdAt, source: j.source, duration: j.duration,
     langs: Object.fromEntries(Object.entries(j.langs).map(([k, v]) => [k, { status: v.status, dubbed: v.dubbed, lines: v.lines.length }])),
   }))));
 
 app.get("/api/jobs/:id", (req, res) => { const j = getJob(req, res); if (j) res.json(publicJob(j)); });
 
+const isBusy = (j) => j.status === "processing" || Object.values(j.langs).some((l) => ["translating", "rendering"].includes(l.status));
+const fileSafe = (s) => s.replace(/[\\/:*?"<>|\u0000-\u001f]/g, "").replace(/\s+/g, "_").slice(0, 80) || "dub";
+
+// Rename (display name only; the uploaded file is untouched). Body: { title }
+app.patch("/api/jobs/:id", async (req, res) => {
+  const job = getJob(req, res); if (!job) return;
+  const title = typeof req.body.title === "string" ? req.body.title.trim().replace(/\s+/g, " ") : "";
+  if (!title || title.length > 80) return res.status(400).json({ error: "Name must be 1-80 characters." });
+  job.title = title;
+  await save(job);
+  res.json({ id: job.id, title });
+});
+
+// Delete a video and everything made from it (uploaded file, transcript, all dubs). Not allowed while it is being processed.
+app.delete("/api/jobs/:id", async (req, res) => {
+  const job = getJob(req, res); if (!job) return;
+  if (isBusy(job)) return res.status(409).json({ error: "This video is still being processed. Try again when it finishes." });
+  try {
+    await rm(jobDir(job.id), { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  } catch (e) {
+    return res.status(500).json({ error: `Could not delete the files (is the video open or playing?): ${e.code || e.message}` });
+  }
+  jobs.delete(job.id);
+  res.status(204).end();
+});
+
 // Dub into another language (translate + voice + mix in the background). Also retries a failed one.
 app.post("/api/jobs/:id/langs/:lang", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
   if (!TARGETS[req.params.lang]) return res.status(400).json({ error: "Unknown language" });
+  if (req.params.lang === job.source) return res.status(400).json({ error: "That is already the spoken language of this video." });
   if (job.status !== "review") return res.status(409).json({ error: "Job is not ready yet" });
   if (job.langs[req.params.lang] && job.langs[req.params.lang].status !== "failed") return res.status(409).json({ error: "Language already added" });
   dubLang(job, req.params.lang);
@@ -224,13 +252,7 @@ app.get("/api/jobs/:id/langs/:lang/video", (req, res) => {
   const L = getLang(req, res, j); if (!L) return;
   const f = join(jobDir(j.id), TARGETS[req.params.lang].code, "dubbed.mp4");
   if (!L.dubbed || !existsSync(f)) return res.status(404).json({ error: "Not rendered yet (or edited since)" });
-  if (req.query.clip) { // "Export Ns clip": first N seconds, stream-copied (no re-encode)
-    const secs = Math.min(600, Math.max(1, Number(req.query.clip) || 60));
-    const out = join(jobDir(j.id), TARGETS[req.params.lang].code, `clip_${secs}.mp4`);
-    execFileSync("ffmpeg", ["-y", "-v", "error", "-i", f, "-t", String(secs), "-c", "copy", out]);
-    return res.download(out, `clip${secs}s_${req.params.lang}_${j.originalName.replace(/\.[^.]+$/, "")}.mp4`);
-  }
-  if (req.query.download) return res.download(f, `dubbed_${req.params.lang}_${j.originalName.replace(/\.[^.]+$/, "")}.mp4`);
+  if (req.query.download) return res.download(f, `${fileSafe(j.title || j.originalName.replace(/\.[^.]+$/, ""))}_${req.params.lang}.mp4`);
   res.sendFile(f);
 });
 

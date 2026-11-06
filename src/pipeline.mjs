@@ -13,11 +13,22 @@ export const TARGETS = {
   kn: { name: "Kannada", code: "kn-IN", script: /[ಀ-೿]/g, example: "ನಮಸ್ಕಾರ ಸ್ನೇಹಿತರೇ" },
   ta: { name: "Tamil", code: "ta-IN", script: /[஀-௿]/g, example: "வணக்கம் நண்பர்களே" },
   te: { name: "Telugu", code: "te-IN", script: /[ఀ-౿]/g, example: "నమస్కారం మిత్రులారా" },
+  ml: { name: "Malayalam", code: "ml-IN", script: /[ഀ-ൿ]/g, example: "നമസ്കാരം കൂട്ടുകാരേ" },
+  bn: { name: "Bengali", code: "bn-IN", script: /[ঀ-৿]/g, example: "নমস্কার বন্ধুরা" },
+  gu: { name: "Gujarati", code: "gu-IN", script: /[઀-૿]/g, example: "નમસ્તે મિત્રો" },
+  pa: { name: "Punjabi", code: "pa-IN", script: /[਀-੿]/g, example: "ਸਤ ਸ੍ਰੀ ਅਕਾਲ ਦੋਸਤੋ" },
+  hi: { name: "Hindi", code: "hi-IN", script: /[ऀ-ॿ]/g, example: "नमस्ते दोस्तों" },
+  en: { name: "English", code: "en-IN", script: /[A-Za-z]/g, latin: true, example: "Hello friends" },
   // Marathi shares the Devanagari script with Hindi, so the script check alone cannot tell them apart;
   // translate() also rejects any line that comes back identical to the Hindi source.
   mr: { name: "Marathi", code: "mr-IN", script: /[ऀ-ॿ]/g, example: "नमस्कार मित्रांनो" },
 };
-export const SOURCES = { hi: { name: "Hindi", code: "hi-IN" }, en: { name: "English", code: "en-IN" } };
+// Spoken languages we can transcribe. Gujarati and Punjabi are left out: the project brief notes that Gnani's batch STT does not handle them.
+export const SOURCES = {
+  hi: { name: "Hindi", code: "hi-IN" }, en: { name: "English", code: "en-IN" }, kn: { name: "Kannada", code: "kn-IN" },
+  ta: { name: "Tamil", code: "ta-IN" }, te: { name: "Telugu", code: "te-IN" }, ml: { name: "Malayalam", code: "ml-IN" },
+  mr: { name: "Marathi", code: "mr-IN" }, bn: { name: "Bengali", code: "bn-IN" },
+};
 
 const MAX_RATIO_BEFORE_TEMPO = 1.2;
 const TEMPO_MIN = 0.85, TEMPO_MAX = 1.25;
@@ -87,6 +98,7 @@ export async function transcribe(audioPath, dir, sourceKey = "hi") {
 function inRightScript(text, target) {
   const inScript = new RegExp(target.script.source);
   const nonLatin = [...text].filter((c) => /\p{L}|\p{M}/u.test(c) && !/[A-Za-z]/.test(c));
+  if (target.latin) return /[A-Za-z]/.test(text) && nonLatin.length === 0; // English: Latin letters only
   return nonLatin.length > 0 && nonLatin.every((c) => inScript.test(c)); // at least one target letter, none from other scripts
 }
 
