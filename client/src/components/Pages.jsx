@@ -189,7 +189,7 @@ export function Library({ onOpen, currentId, onNew, onChanged, onDeleted }) {
               {msg?.id === r.id && <p role="alert" className="m-0 px-1.5 text-xs text-pink">{msg.text}</p>}
 
               {asking ? (
-                <div className="mx-1.5 mb-1 flex flex-col gap-2.5 rounded-2xl border border-pink/40 bg-pink/10 p-3.5">
+                <div className="mx-1.5 mt-auto mb-1 flex flex-col gap-2.5 rounded-2xl border border-pink/40 bg-pink/10 p-3.5">
                   <span className="text-[13px] leading-relaxed text-ink">Delete this video and all its dubs? This can’t be undone.</span>
                   <div className="flex gap-2">
                     <button type="button" disabled={busyId === r.id} onClick={() => remove(r)} className="h-10 flex-1 rounded-full border-0 bg-pink text-[13px] font-bold text-[#1B0B17] disabled:opacity-60">{busyId === r.id ? "Deleting…" : "Delete"}</button>
@@ -197,7 +197,7 @@ export function Library({ onOpen, currentId, onNew, onChanged, onDeleted }) {
                   </div>
                 </div>
               ) : (
-                <button type="button" onClick={() => onOpen(r.id)} className="mx-1.5 mb-1 h-11 rounded-full border border-[#2C3247] bg-transparent text-sm font-bold text-ink group-hover:border-lav group-hover:text-lav">Open in Studio</button>
+                <button type="button" onClick={() => onOpen(r.id)} className="mx-1.5 mt-auto mb-1 h-11 rounded-full border border-[#2C3247] bg-transparent text-sm font-bold text-ink group-hover:border-lav group-hover:text-lav">Open in Studio</button>
               )}
             </article>
           );

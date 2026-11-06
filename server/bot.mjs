@@ -126,27 +126,36 @@ export function createBot({ token, apiBase, download, botInfo }) {
     }
   }
 
-  async function sendResult(api, chatId, jobId, lang, title) {
+  // In a group, only the person who sent the video may choose its languages and voice (others get a small notice).
+  async function mine(ctx, p) {
+    if (p && p.chatType !== "private" && p.userId && ctx.from?.id !== p.userId) {
+      await ctx.answerCallbackQuery({ text: `Only ${p.userName} can choose for this video.` });
+      return false;
+    }
+    await ctx.answerCallbackQuery();
+    return true;
+  }
+
+  async function sendResult(api, chatId, jobId, lang, title, inGroup = false) {
     const r = await fetch(`${apiBase}/api/jobs/${jobId}/langs/${lang}/video?download=1`, { signal: AbortSignal.timeout(60000) });
     if (!r.ok) throw new Error("The dubbed video is not available any more.");
     const buf = Buffer.from(await r.arrayBuffer());
     const me = botUsername || (await api.getMe()).username;
-    const kb = new InlineKeyboard()
-      .url("Share to group", `https://t.me/${me}?startgroup=share_${jobId}_${lang}`).row()
-      .text("Change language", `c:${jobId}`)
-      .text("Change voice", `cv:${jobId}:${lang}`);
+    const kb = new InlineKeyboard();
+    if (!inGroup) kb.url("Share to group", `https://t.me/${me}?startgroup=share_${jobId}_${lang}`).row(); // pointless inside a group
+    kb.text("Change language", `c:${jobId}`).text("Change voice", `cv:${jobId}:${lang}`);
     await api.sendVideo(chatId, new InputFile(buf, `${title.replace(/[^\w-]+/g, "_").slice(0, 40) || "dub"}_${lang}.mp4`), {
       caption: `Dubbed into ${LANGS[lang][1]} (${LANGS[lang][0]})`, reply_markup: kb, supports_streaming: true,
     });
   }
 
   // Shared by "new video" and "change language": runs the dub and delivers the result into chatId.
-  async function dubAndDeliver({ api, chatId, statusMsgId, jobId, lang, title, viewerKey }) {
+  async function dubAndDeliver({ api, chatId, statusMsgId, jobId, lang, title, viewerKey, inGroup = false }) {
     let last = "";
     const tick = (t) => { const text = `⏳ ${t}…`; if (text !== last) { last = text; edit(api, chatId, statusMsgId, text); } };
     try {
       const job = await waitForDub(jobId, lang, tick);
-      await sendResult(api, chatId, jobId, lang, title);
+      await sendResult(api, chatId, jobId, lang, title, inGroup);
       const notes = job.langs[lang]?.cloneNotes ?? [];
       if (notes.length) await api.sendMessage(chatId, `ℹ️ ${notes[0]}`).catch(() => {});
       await api.deleteMessage(chatId, statusMsgId).catch(() => {});
@@ -158,13 +167,13 @@ export function createBot({ token, apiBase, download, botInfo }) {
   }
 
   // ----- commands -----
-  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.\n\nYou can pick the voice too, or have me match the original speaker's voice.";
+  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.\n\nYou can pick the voice too, or have me match the original speaker's voice.\n\nIn a group: send a video, or reply to a video with /dub.";
   bot.command("start", async (ctx) => {
     const payload = ctx.match?.trim();
     const m = payload && /^share_([0-9a-f-]{36})_([a-z]{2})$/.exec(payload);
     if (m && ctx.chat.type !== "private") { // the "Share to group" link: post that dub into this group
       const [, jobId, lang] = m;
-      try { await sendResult(ctx.api, ctx.chat.id, jobId, lang, "dub"); }
+      try { await sendResult(ctx.api, ctx.chat.id, jobId, lang, "dub", true); }
       catch { await ctx.reply("Sorry, that dubbed video is not available any more."); }
       return;
     }
@@ -173,16 +182,8 @@ export function createBot({ token, apiBase, download, botInfo }) {
   bot.command("help", (ctx) => ctx.reply(welcome));
 
   // ----- a video arrives -----
-  const groupHintAt = new Map(); // chat id -> time of the last "please use a private chat" hint (so we never spam a group)
-  async function onMedia(ctx, media) {
-    if (ctx.chat.type !== "private") { // dubbing happens in private chats; groups just receive finished dubs
-      const last = groupHintAt.get(ctx.chat.id) ?? 0;
-      if (Date.now() - last > 3600_000) {
-        groupHintAt.set(ctx.chat.id, Date.now());
-        await ctx.reply(`To dub a video, send it to me in a private chat: https://t.me/${ctx.me.username}`, { reply_parameters: { message_id: ctx.msg.message_id } }).catch(() => {});
-      }
-      return;
-    }
+  // Works in private chats AND groups. `replyTo` = the message holding the video (the video itself, or the one /dub replied to).
+  async function onMedia(ctx, media, replyTo = ctx.msg.message_id) {
     if (media.file_size && media.file_size > MAX_DOWNLOAD) {
       return ctx.reply(`That video is ${(media.file_size / 1048576).toFixed(0)} MB. Telegram only lets bots download files up to 20 MB, so please send a smaller or shorter one.`);
     }
@@ -191,11 +192,18 @@ export function createBot({ token, apiBase, download, botInfo }) {
     }
     prune();
     const key = newKey();
-    pending.set(key, { fileId: media.file_id, name: media.file_name || "video.mp4", userName: ctx.from?.first_name || "Someone", chatId: ctx.chat.id, started: false, at: Date.now() });
+    pending.set(key, { fileId: media.file_id, name: media.file_name || "video.mp4", userName: ctx.from?.first_name || "Someone", userId: ctx.from?.id, chatId: ctx.chat.id, chatType: ctx.chat.type, started: false, at: Date.now() });
     await ctx.reply("Which language is spoken in this video?", {
-      reply_markup: langKeyboard(SOURCES, `s:${key}`), reply_parameters: { message_id: ctx.msg.message_id },
+      reply_markup: langKeyboard(SOURCES, `s:${key}`), reply_parameters: { message_id: replyTo, allow_sending_without_reply: true },
     });
   }
+  // "/dub" as a reply to a video. Telegram always delivers commands to a bot, even in a group where privacy mode hides normal messages.
+  bot.command("dub", async (ctx) => {
+    const m = ctx.msg.reply_to_message;
+    const media = m?.video ?? m?.video_note ?? m?.animation ?? (m?.document?.mime_type?.startsWith("video/") ? m.document : null);
+    if (!media) return ctx.reply("Reply to a video with /dub and I'll dub it.", { reply_parameters: { message_id: ctx.msg.message_id, allow_sending_without_reply: true } });
+    return onMedia(ctx, media, m.message_id);
+  });
   bot.on("message:video", (ctx) => onMedia(ctx, ctx.msg.video));
   bot.on("message:video_note", (ctx) => onMedia(ctx, ctx.msg.video_note));
   bot.on("message:document", (ctx) => (ctx.msg.document.mime_type?.startsWith("video/")
@@ -207,9 +215,9 @@ export function createBot({ token, apiBase, download, botInfo }) {
 
   // ----- button: spoken language -----
   bot.callbackQuery(/^s:([0-9a-f]{8}):([a-z]{2})$/, async (ctx) => {
-    await ctx.answerCallbackQuery();
     const [, key, source] = ctx.match;
     const p = pending.get(key);
+    if (!(await mine(ctx, p))) return;
     const chatId = ctx.callbackQuery.message.chat.id;
     const msgId = ctx.callbackQuery.message.message_id;
     if (!p || !SOURCES.includes(source)) return edit(ctx.api, chatId, msgId, "This request has expired. Please send the video again.");
@@ -221,9 +229,9 @@ export function createBot({ token, apiBase, download, botInfo }) {
 
   // ----- button: dub into -> ask which voice -----
   bot.callbackQuery(/^t:([0-9a-f]{8}):([a-z]{2})$/, async (ctx) => {
-    await ctx.answerCallbackQuery();
     const [, key, lang] = ctx.match;
     const p = pending.get(key);
+    if (!(await mine(ctx, p))) return;
     const chatId = ctx.callbackQuery.message.chat.id;
     const msgId = ctx.callbackQuery.message.message_id;
     if (!p || !p.source || !TARGETS.includes(lang) || lang === p.source) return edit(ctx.api, chatId, msgId, "This request has expired. Please send the video again.");
@@ -233,9 +241,9 @@ export function createBot({ token, apiBase, download, botInfo }) {
 
   // ----- button: voice chosen -> start the dub -----
   bot.callbackQuery(/^v:([0-9a-f]{8}):(\w+)$/, async (ctx) => {
-    await ctx.answerCallbackQuery();
     const [, key, voice] = ctx.match;
     const p = pending.get(key);
+    if (!(await mine(ctx, p))) return;
     const chatId = ctx.callbackQuery.message.chat.id;
     const msgId = ctx.callbackQuery.message.message_id;
     if (!p || !p.source || !p.target || !VOICE_IDS.includes(voice)) return edit(ctx.api, chatId, msgId, "This request has expired. Please send the video again.");
@@ -258,7 +266,7 @@ export function createBot({ token, apiBase, download, botInfo }) {
       if (!r.ok) throw new Error(job.error || "The Studio rejected the video.");
       await apiJson("PATCH", `/api/jobs/${job.id}`, { title: `Telegram · ${p.userName}` }).catch(() => {});
       pending.delete(key);
-      await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId: job.id, lang, title: p.userName, viewerKey: key });
+      await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId: job.id, lang, title: p.userName, viewerKey: key, inGroup: p.chatType !== "private" });
     } catch (e) {
       await edit(ctx.api, chatId, msgId, `😕 Sorry, that didn't work.\n${friendly(e)}`);
       await upsertViewer(key, { state: "Failed" });
@@ -287,7 +295,7 @@ export function createBot({ token, apiBase, download, botInfo }) {
       if (voice === "clone") body.cloneConsent = true; // the button says "I have permission"
       await apiJson("PUT", `/api/jobs/${jobId}/voices`, body);
       await apiJson("POST", `/api/jobs/${jobId}/langs/${lang}/render`);
-      await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId, lang, title: ctx.from?.first_name || "dub", viewerKey: key });
+      await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId, lang, title: ctx.from?.first_name || "dub", viewerKey: key, inGroup: ctx.callbackQuery.message.chat.type !== "private" });
     } catch (e) {
       await edit(ctx.api, chatId, msgId, `😕 Sorry, that didn't work.\n${friendly(e)}`);
       await upsertViewer(key, { state: "Failed" });
@@ -319,7 +327,7 @@ export function createBot({ token, apiBase, download, botInfo }) {
       const existing = job.langs[lang];
       if (!existing || existing.status === "failed") await apiJson("POST", `/api/jobs/${jobId}/langs/${lang}`);
       else if (!existing.dubbed && existing.status === "review") await apiJson("POST", `/api/jobs/${jobId}/langs/${lang}/render`);
-      await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId, lang, title: ctx.from?.first_name || "dub", viewerKey: key });
+      await dubAndDeliver({ api: ctx.api, chatId, statusMsgId: msgId, jobId, lang, title: ctx.from?.first_name || "dub", viewerKey: key, inGroup: ctx.callbackQuery.message.chat.type !== "private" });
     } catch (e) {
       await edit(ctx.api, chatId, msgId, `😕 Sorry, that didn't work.\n${friendly(e)}`);
       await upsertViewer(key, { state: "Failed" });
@@ -334,6 +342,12 @@ export function createBot({ token, apiBase, download, botInfo }) {
     if (["member", "administrator"].includes(u.new_chat_member.status)) {
       const members = await ctx.api.getChatMemberCount(chat.id).catch(() => null);
       data.groups = [...data.groups.filter((g) => g.id !== id), { id, name: chat.title || "Group", members }];
+      if (["left", "kicked"].includes(u.old_chat_member.status)) { // just joined: say how to use me here
+        // Telegram "privacy mode" hides ordinary group messages from bots, except for admins. /dub (a command) always works.
+        const seesAll = botInfo?.can_read_all_group_messages || bot.botInfo?.can_read_all_group_messages || u.new_chat_member.status === "administrator";
+        await ctx.api.sendMessage(chat.id, "Hi everyone, I'm Vaani 🎙️ I dub videos into Indian languages.\n\n" +
+          (seesAll ? "Send a video here, or reply to a video with /dub." : "Reply to any video with /dub and I'll dub it.\n(If you'd like me to react to every video, make me a group admin.)")).catch(() => {});
+      }
     } else if (["left", "kicked"].includes(u.new_chat_member.status)) {
       data.groups = data.groups.filter((g) => g.id !== id);
     }
@@ -350,7 +364,10 @@ export async function startBot({ token, apiBase }) {
   const bot = createBot({ token, apiBase });
   try { await bot.init(); } catch (e) { console.error("[bot] Telegram rejected the token:", e.description || e.message); return null; }
   botUsername = bot.botInfo.username;
-  await bot.api.setMyCommands([{ command: "start", description: "How to use Vaani" }, { command: "help", description: "Help" }]).catch(() => {});
+  await bot.api.setMyCommands([
+    { command: "dub", description: "Reply to a video with /dub to dub it" },
+    { command: "start", description: "How to use Vaani" }, { command: "help", description: "Help" },
+  ]).catch(() => {});
   bot.start({ allowed_updates: ["message", "callback_query", "my_chat_member"], onStart: () => { running = true; console.log(`[bot] online as @${botUsername}`); } })
     .catch((e) => { running = false; console.error("[bot] stopped:", e.description || e.message); })
     .finally(() => { running = false; });
