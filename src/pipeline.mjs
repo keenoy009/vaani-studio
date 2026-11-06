@@ -30,8 +30,13 @@ export const SOURCES = {
   mr: { name: "Marathi", code: "mr-IN" }, bn: { name: "Bengali", code: "bn-IN" },
 };
 
+// A dubbed line should take about as long as the original speaker did, so there is no dead air.
+//  - speech much LONGER than the slot  (> 1.2x): the LLM shortens the line
+//  - speech much SHORTER than the slot (< 0.85x): the LLM lengthens the line (same meaning, fuller phrasing)
+//  - then ffmpeg atempo closes the rest of the gap, within 0.75-1.25x
 const MAX_RATIO_BEFORE_TEMPO = 1.2;
-const TEMPO_MIN = 0.85, TEMPO_MAX = 1.25;
+const MIN_RATIO_BEFORE_TEMPO = 0.85;
+const TEMPO_MIN = 0.75, TEMPO_MAX = 1.25;
 
 export async function makeJobDir(dir) { await mkdir(dir, { recursive: true }); return dir; }
 
@@ -131,23 +136,54 @@ async function shorten(line, slot, target) {
   return (await askJson(system, JSON.stringify({ original: line.source_text, current: line.text }))).text;
 }
 
-/** Speak one line and time-fit it. Mutates and returns the line. onlyIfNeeded skips TTS if audio is current. */
-export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoShorten = true } = {}) {
+/** Ask the LLM for a slightly fuller version of a line, so the dub fills the time the original speaker took. */
+async function lengthen(line, slot, target) {
+  const wanted = Math.min(Math.floor(line.text.length * ((slot * 0.97) / line.tts_seconds)), Math.floor(line.text.length * 2.2));
+  const system =
+    `You make ${target.name} dubbing lines a little longer so they fill the time the original speaker took. Keep exactly the same meaning and facts, ` +
+    `in the native ${target.name} script. Do NOT add new information, examples or opinions: only use fuller, natural spoken phrasing ` +
+    `(for example polite connectors, complete forms, or stating the same idea more completely). Aim for about ${wanted} characters ` +
+    `(currently ${line.text.length}). Reply ONLY with JSON: {"text": string}.`;
+  return (await askJson(system, JSON.stringify({ original: line.source_text, current: line.text }))).text;
+}
+
+/**
+ * Speak one line and time-fit it to its slot. Mutates and returns the line.
+ * autoFit: let the LLM shorten a too-long line or lengthen a too-short one (never used for lines the user typed).
+ */
+export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoFit = true } = {}) {
   const t = TARGETS[targetKey];
   const slot = line.end - line.start;
   const raw = join(dir, `tts_${line.id}.wav`);
   await writeFile(raw, await tts(line.text, t.code, voice));
   line.tts_seconds = +duration(raw).toFixed(2);
 
-  for (let tries = 1; autoShorten && tries <= 3 && line.tts_seconds / slot > MAX_RATIO_BEFORE_TEMPO; tries++) {
+  for (let tries = 1; autoFit && tries <= 3 && line.tts_seconds / slot > MAX_RATIO_BEFORE_TEMPO; tries++) {
     let shorter;
     try { shorter = await shorten({ ...line, tts_file: raw }, slot, t); }
     catch { break; } // shortening is a nice-to-have: if the LLM is down, keep the line and just speed it up
     if (!shorter || !inRightScript(shorter, t) || shorter.length >= line.text.length) continue;
     line.text = shorter;
-    line.shortened = true; // machine-shortened to fit the time slot (the UI shows a tag)
+    line.shortened = true; line.lengthened = false; // machine-shortened to fit the time slot (the UI shows a tag)
     await writeFile(raw, await tts(line.text, t.code, voice));
     line.tts_seconds = +duration(raw).toFixed(2);
+  }
+  // Too SHORT (the dub would leave dead air at the end of the slot): try a fuller wording, keep it only if it fits better.
+  for (let tries = 1; autoFit && tries <= 2 && line.tts_seconds / slot < MIN_RATIO_BEFORE_TEMPO; tries++) {
+    let longer;
+    try { longer = await lengthen(line, slot, t); }
+    catch (e) { if (/busy right now/.test(e.message)) break; continue; } // nice-to-have: give up if the AI is overloaded, otherwise try again
+    // (the real limit is how long the speech turns out to be, checked below; 3x is only a sanity guard)
+    if (!longer || !inRightScript(longer, t) || longer.length <= line.text.length || longer.length > line.text.length * 3) continue;
+    const buf = await tts(longer, t.code, voice);
+    const probe = join(dir, `tts_${line.id}_try.wav`);
+    await writeFile(probe, buf);
+    const secs = +duration(probe).toFixed(2);
+    if (secs <= line.tts_seconds || secs / slot > 1.1) continue; // no better, or it overshoots the slot
+    line.text = longer;
+    line.lengthened = true; line.shortened = false;
+    await writeFile(raw, buf);
+    line.tts_seconds = secs;
   }
   const tempo = Math.min(TEMPO_MAX, Math.max(TEMPO_MIN, line.tts_seconds / slot));
   const fit = join(dir, `fit_${line.id}.wav`);

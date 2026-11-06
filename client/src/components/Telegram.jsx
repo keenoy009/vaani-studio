@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api } from "../api.js";
+import { api, LANGS } from "../api.js";
 
 const VIEWER_COLORS = ["#A99BFF", "#FFA6E7", "#FFB68F", "#6EE7B7"];
 const CHIP = { Done: ["rgba(110,231,183,0.14)", "#6EE7B7"], Dubbing: ["rgba(169,155,255,0.16)", "#A99BFF"], Waiting: ["#232738", "#9AA3B8"], Failed: ["rgba(255,166,231,0.14)", "#FFA6E7"] };
@@ -89,7 +89,7 @@ export default function Telegram({ job, langId, L, tg, onError }) {
         {sending ? "Sending…" : canSend ? "Send to Telegram" : `🔒 ${reason}`}
       </button>
       {sentMsg && <p className="m-0 text-sm font-semibold text-mint">{sentMsg}</p>}
-      {L.dubbed && <a href={api.downloadUrl(job.id, langId)} className="flex h-12 items-center justify-center rounded-full border border-[#2C3247] text-sm font-bold text-ink no-underline">Download MP4</a>}
+      {L.dubbed && <a href={api.downloadUrl(job.id, langId)} className="flex h-12 items-center justify-center rounded-full border border-[#2C3247] text-sm font-bold text-ink no-underline">Download dubbed MP4 · {LANGS.find((l) => l.id === langId)?.name}</a>}
 
       <Viewers viewers={tg.viewers} />
     </section>

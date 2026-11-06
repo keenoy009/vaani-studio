@@ -156,8 +156,8 @@ async function renderLang(job, lang) {
         else { voice = defaultVoice(job, line.speaker); ttsVoice = voice; }
       }
       line.voice = voice;
-      // Too-long machine translations are shortened to fit; a line the user typed themselves is never rewritten.
-      await voiceLine(line, lang, dir, ttsVoice, { autoShorten: !line.edited });
+      // Too-long machine translations are shortened and too-short ones lengthened to fit the slot; a line the user typed is never rewritten.
+      await voiceLine(line, lang, dir, ttsVoice, { autoFit: !line.edited });
     }
     mix(join(jobDir(job.id), job.videoFile), L.lines, join(dir, "dubbed.mp4"));
     L.dubbed = true;

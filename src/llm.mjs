@@ -7,6 +7,23 @@ const apiKey = process.env.LLM_API_KEY;
 const MODELS = [process.env.LLM_MODEL || "gemini-3.5-flash-lite", process.env.LLM_FALLBACK_MODEL || "gemini-3.1-flash-lite"];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// The model occasionally adds a stray character after valid JSON (e.g. an extra "}"). Keep the first complete {...} or [...].
+function parseLoose(text) {
+  try { return JSON.parse(text); } catch { /* fall through to the tolerant reader */ }
+  const start = text.search(/[[{]/);
+  if (start < 0) throw new Error("The AI answer contained no JSON");
+  const open = text[start], close = open === "{" ? "}" : "]";
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (inStr) { if (esc) esc = false; else if (c === "\\") esc = true; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === open) depth++;
+    else if (c === close && --depth === 0) return JSON.parse(text.slice(start, i + 1));
+  }
+  throw new Error("The AI answer was cut off");
+}
+
 async function geminiJson(system, user) {
   let lastError;
   for (const model of MODELS) {
@@ -37,7 +54,7 @@ async function geminiJson(system, user) {
       const body = await res.text();
       if (!res.ok) throw new Error(`Gemini (${model}) ${res.status}: ${body.slice(0, 300)}`);
       const text = JSON.parse(body).candidates?.[0]?.content?.parts?.map((p) => p.text).join("") ?? "";
-      return JSON.parse(text);
+      return parseLoose(text);
     }
     // this model stayed busy: fall through to the next one
   }

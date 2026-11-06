@@ -62,6 +62,7 @@ export default function Review({ job, langId, L, actions, seek }) {
                   Speaker {speakers.indexOf(l.speaker) + 1} · <span className="font-mono">{fmt(l.start)}–{fmt(l.end)}</span>
                   {l.edited && <span className="rounded-full bg-lav/15 px-2 py-0.5 text-[11px] font-bold text-lav">edited</span>}
                   {l.shortened && <span className="rounded-full bg-peach/15 px-2 py-0.5 text-[11px] font-bold text-peach" title="The translation was too long for its time slot, so it was shortened automatically">shortened to fit</span>}
+                  {l.lengthened && <span className="rounded-full bg-peach/15 px-2 py-0.5 text-[11px] font-bold text-peach" title="The translation was much shorter than the original speech, so it was reworded a little fuller to avoid a silent gap">lengthened to fit</span>}
                 </div>
                 <div className="text-[13px] text-[#8A93A8]">{l.source_text}</div>
                 {isEd ? (

@@ -11,6 +11,8 @@ Built for the Gnani AI "Great Indian AI Internship Challenge". Deadline: Nov 10 
 
 - Nov 6 (later): Voice cloning is BUILT ("Match original speaker"): 5-30 s of each speaker's own speech is cut from the video audio -> Gnani embedding -> `vachana-vc-v1` (the live API REQUIRES `model`, despite its docs). Opt-in only: the user must confirm permission (Studio prompt; Telegram button says "I have permission"); the server refuses without `cloneConsent`. Needs >= 5 s of that speaker's speech, else a studio voice is used and a note is shown. Telegram asks for a voice after the language and has a "Change voice" button. Tested cloned voices: Hindi, Kannada, Tamil, English only.
 
+- Nov 6 (gaps): No dead air. Time-fit is now 0.75-1.25x atempo (was 0.85-1.25x). A line whose speech is < 85% of its slot is reworded fuller by the LLM (same meaning, no new facts; kept only if it fits better and stays <= 110% of the slot); > 120% is shortened. Lines the user edited are never rewritten.
+
 ## Rules for you (Claude Code)
 - Guide me step by step. Small steps, run and verify each one before the next.
 - Never put API keys in code or chat. Use `.env` (gitignored) and `.env.example`.

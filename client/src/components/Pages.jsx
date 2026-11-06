@@ -269,8 +269,8 @@ export function Settings({ job, name, setName, onChanged, onError, onNew }) {
             </div>
             <div className="flex flex-col gap-2 rounded-[20px] border border-line bg-well p-4">
               <span className="text-[13px] text-mute">Time-fit speed range</span>
-              <span className="font-mono text-[30px] leading-none font-medium">0.85–1.25×</span>
-              <span className="text-xs leading-relaxed text-mute">Dubbed lines are sped up or slowed within this range; longer lines are shortened by AI.</span>
+              <span className="font-mono text-[30px] leading-none font-medium">0.75–1.25×</span>
+              <span className="text-xs leading-relaxed text-mute">Each dubbed line is stretched to match the original timing. Too-long lines are shortened and too-short lines are reworded fuller by AI, so there is no silent gap.</span>
             </div>
           </div>
         </section>
