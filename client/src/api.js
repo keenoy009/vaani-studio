@@ -37,6 +37,8 @@ export const api = {
   voices: () => fetch("/api/voices").then(handle),
   jobVoices: (id) => fetch(`/api/jobs/${id}/voices`).then(handle),
   speak: (body) => fetch("/api/speak", json("POST", body)).then(handle),
+  speakHistory: () => fetch("/api/speak").then(handle),
+  speakDelete: (id) => fetch(`/api/speak/${id}`, { method: "DELETE" }).then(handle),
   speakAudio: (id, format = "mp3", download = false) => `/api/speak/${id}/audio?format=${format}${download ? "&download=1" : ""}`,
   setVoices: (id, body) => fetch(`/api/jobs/${id}/voices`, json("PUT", body)).then(handle),
   telegram: () => fetch("/api/telegram").then(handle),

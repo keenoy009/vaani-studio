@@ -46,10 +46,6 @@ const MIX_VERSION = 2;
 
 await mkdir(JOBS_DIR, { recursive: true });
 await mkdir(SPEAK_DIR, { recursive: true });
-// voice messages are throwaway: forget the ones older than a week
-for (const id of await readdir(SPEAK_DIR)) {
-  try { if (Date.now() - (await stat(join(SPEAK_DIR, id))).mtimeMs > 7 * 86400_000) await rm(join(SPEAK_DIR, id), { recursive: true, force: true }); } catch { /* ignore */ }
-}
 await initAuth();
 
 // ---------- job store (in memory, mirrored to work/jobs/<id>/job.json) ----------
@@ -409,12 +405,33 @@ app.post("/api/speak", async (req, res) => {
   const id = randomUUID(), dir = join(SPEAK_DIR, id);
   try {
     const r = await speakMessage({ text, to, from, voice: v, glossary, dir });
-    await writeFile(join(dir, "meta.json"), JSON.stringify({ ownerId: owner, to, voice: v, text: r.text, createdAt: new Date().toISOString() }));
+    await writeFile(join(dir, "meta.json"), JSON.stringify({ ownerId: owner, to, from, voice: v, text: r.text, sourceText: text.trim(), seconds: r.seconds, createdAt: new Date().toISOString() }));
     res.json({ id, to, voice: v, text: r.text, seconds: r.seconds, termsMissed: r.termsMissed });
   } catch (e) {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
     res.status(500).json({ error: e.message });
   } finally { speakBusy.set(owner, Math.max(0, (speakBusy.get(owner) ?? 1) - 1)); }
+});
+// History: every voice message you made, newest first (a workspace owner also sees the Telegram bot's).
+app.get("/api/speak", async (req, res) => {
+  const items = [];
+  for (const id of await readdir(SPEAK_DIR).catch(() => [])) {
+    if (!SPEAK_ID.test(id)) continue;
+    try {
+      const meta = JSON.parse(await readFile(join(SPEAK_DIR, id, "meta.json"), "utf8"));
+      if (!canSee(req.user, { ownerId: meta.ownerId })) continue;
+      items.push({ id, to: meta.to, voice: meta.voice, text: meta.text, sourceText: meta.sourceText ?? null, seconds: meta.seconds ?? null, createdAt: meta.createdAt, via: meta.ownerId === "telegram" ? "Telegram" : "Studio" });
+    } catch { /* not a finished voice message */ }
+  }
+  res.json(items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200));
+});
+app.delete("/api/speak/:id", async (req, res) => {
+  if (!SPEAK_ID.test(req.params.id)) return res.status(404).json({ error: "Not found" });
+  const dir = join(SPEAK_DIR, req.params.id);
+  let meta; try { meta = JSON.parse(await readFile(join(dir, "meta.json"), "utf8")); } catch { return res.status(404).json({ error: "Not found" }); }
+  if (!canSee(req.user, { ownerId: meta.ownerId })) return res.status(404).json({ error: "Not found" });
+  await rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  res.status(204).end();
 });
 // The audio: ?format=mp3 (default) | wav | ogg (Opus, for Telegram voice notes); ?download=1 saves it as a file.
 app.get("/api/speak/:id/audio", async (req, res) => {

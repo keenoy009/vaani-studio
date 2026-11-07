@@ -16,6 +16,11 @@ export default function Speak({ onError }) {
   const [results, setResults] = useState({}); // lang id -> { status: "working" | "done" | "failed", ... }
   const [busy, setBusy] = useState(false);
   const run = useRef(0); // a new run makes older ones stop updating the screen
+  const [history, setHistory] = useState(null); // every voice message made earlier (kept on the server)
+  const [asking, setAsking] = useState(null);     // id of the message whose Delete is waiting for confirmation
+  const loadHistory = () => api.speakHistory().then(setHistory).catch(() => {});
+  useEffect(() => { loadHistory(); }, []);
+  const remove = async (id) => { try { await api.speakDelete(id); setAsking(null); await loadHistory(); } catch (e) { onError?.(e.message); } };
   useEffect(() => { api.voices().then(setVoices).catch(() => {}); }, []);
 
   const toggle = (id) => setTargets((t) => (t.includes(id) ? (t.length > 1 ? t.filter((x) => x !== id) : t) : [...t, id]));
@@ -35,10 +40,14 @@ export default function Speak({ onError }) {
     setResults(Object.fromEntries(targets.map((t) => [t, { status: "queued" }])));
     const queue = [...targets];
     await Promise.all(Array.from({ length: Math.min(AT_ONCE, queue.length) }, async () => { while (queue.length) await voiceOne(queue.shift(), myRun); }));
+    loadHistory();
     if (run.current === myRun) setBusy(false);
   };
 
   const shown = LANGS.filter((l) => results[l.id]);
+  const nowIds = new Set(Object.values(results).map((r) => r.id));
+  const older = (history ?? []).filter((h) => !nowIds.has(h.id)); // the ones from this run are already shown above
+  const when = (iso) => new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
   const voiceInfo = voices.find((v) => v.name === voice);
 
   return (
@@ -137,13 +146,49 @@ export default function Speak({ onError }) {
               {r.status === "failed" && (
                 <div className="flex flex-col gap-2.5">
                   <span className="text-sm text-pink">{r.error}</span>
-                  <button type="button" disabled={busy} onClick={() => { const myRun = run.current; setBusy(true); voiceOne(l.id, myRun).finally(() => setBusy(false)); }}
+                  <button type="button" disabled={busy} onClick={() => { const myRun = run.current; setBusy(true); voiceOne(l.id, myRun).finally(() => { setBusy(false); loadHistory(); }); }}
                     className="h-10 self-start rounded-full border border-[#2C3247] bg-transparent px-5 text-[13px] font-bold text-ink disabled:opacity-50">Try again</button>
                 </div>
               )}
             </article>
           );
         })}
+        {older.length > 0 && (
+          <div className="flex flex-col gap-3.5 pt-2">
+            <div className="flex items-baseline justify-between px-1">
+              <h3 className="m-0 text-base font-extrabold">Earlier voice messages</h3>
+              <span className="text-xs text-mute">{older.length} saved</span>
+            </div>
+            {older.map((h) => {
+              const l = LANGS.find((x) => x.id === h.to);
+              return (
+                <article key={h.id} className="flex flex-col gap-3 rounded-[24px] border border-line bg-panel p-4">
+                  <header className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-baseline gap-2"><span className="text-lg font-bold">{l?.native ?? h.to}</span><span className="text-xs text-mute">{l?.name} · {h.voice}{h.via === "Telegram" ? " · via Telegram" : ""}</span></span>
+                    <span className="text-xs text-mute">{when(h.createdAt)}{h.seconds ? ` · ${h.seconds}s` : ""}</span>
+                  </header>
+                  {h.sourceText && <p className="m-0 text-[13px] leading-relaxed text-mute">You wrote: {h.sourceText}</p>}
+                  <p lang={h.to} className="m-0 rounded-2xl bg-well px-4 py-3 text-[15px] leading-relaxed">{h.text}</p>
+                  <audio controls preload="none" src={api.speakAudio(h.id)} className="w-full" />
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <a href={api.speakAudio(h.id, "mp3", true)} className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-bold text-[#0B0A18] no-underline">Download MP3</a>
+                    <a href={api.speakAudio(h.id, "wav", true)} className="inline-flex h-10 items-center rounded-full border border-[#2C3247] px-5 text-[13px] font-bold text-ink no-underline">WAV</a>
+                    {h.sourceText && <button type="button" onClick={() => { setText(h.sourceText); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="h-10 rounded-full border border-[#2C3247] bg-transparent px-5 text-[13px] font-bold text-ink">Use this text again</button>}
+                    {asking === h.id ? (
+                      <span className="ml-auto flex items-center gap-2 text-xs">
+                        <span className="text-mute">Delete for good?</span>
+                        <button type="button" onClick={() => remove(h.id)} className="h-9 rounded-full border-0 bg-pink px-4 text-xs font-bold text-[#1B0B17]">Delete</button>
+                        <button type="button" onClick={() => setAsking(null)} className="h-9 rounded-full border border-[#2C3247] bg-transparent px-4 text-xs font-bold text-ink">Keep</button>
+                      </span>
+                    ) : (
+                      <button type="button" onClick={() => setAsking(h.id)} aria-label="Delete this voice message" className="ml-auto h-10 rounded-full border-0 bg-transparent px-3 text-[13px] font-bold text-mute hover:text-pink">Delete</button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );
