@@ -6,6 +6,15 @@ const AT_ONCE = 2; // how many languages are voiced at the same time
 
 const Spinner = () => <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-lav/30 border-t-lav" aria-hidden="true" />;
 
+// A labelled piece of text: the original message, or its translation.
+const TextBlock = ({ label, lang, children }) => (
+  <div className="flex flex-col gap-1.5">
+    <span className="text-[11px] font-bold tracking-[0.12em] text-mute">{label}</span>
+    <p lang={lang} className="m-0 rounded-2xl bg-well px-4 py-3 text-[15px] leading-relaxed">{children}</p>
+  </div>
+);
+const NOT_SAVED = <span className="italic text-mute">Not saved: this message was made before originals were kept.</span>;
+
 // "Voice a message": type or paste text, pick languages and a voice, get speech back. No video needed.
 export default function Speak({ onError }) {
   const [text, setText] = useState("");
@@ -30,7 +39,7 @@ export default function Speak({ onError }) {
   const voiceOne = async (lang, myRun) => {
     const set = (v) => { if (run.current === myRun) setResults((r) => ({ ...r, [lang]: v })); };
     set({ status: "working" });
-    try { set({ status: "done", ...(await api.speak({ text, from, to: lang, voice })) }); }
+    try { set({ status: "done", sourceText: text.trim(), ...(await api.speak({ text, from, to: lang, voice })) }); }
     catch (e) { set({ status: "failed", error: e.message }); }
   };
   const go = async () => {
@@ -133,7 +142,8 @@ export default function Speak({ onError }) {
               </header>
               {r.status === "done" && (
                 <>
-                  <p lang={l.id} className="m-0 rounded-2xl bg-well px-4 py-3 text-[15px] leading-relaxed">{r.text}</p>
+                  <TextBlock label="ORIGINAL" lang={from === "auto" ? undefined : from}>{r.sourceText}</TextBlock>
+                  <TextBlock label={`TRANSLATED · ${l.name.toUpperCase()}`} lang={l.id}>{r.text}</TextBlock>
                   {r.termsMissed?.length > 0 && <span className="text-xs text-pink">Could not keep: {r.termsMissed.join(", ")}. Check the text above.</span>}
                   <audio controls preload="metadata" src={api.speakAudio(r.id)} className="w-full" />
                   <div className="flex flex-wrap gap-2.5">
@@ -167,8 +177,8 @@ export default function Speak({ onError }) {
                     <span className="flex items-baseline gap-2"><span className="text-lg font-bold">{l?.native ?? h.to}</span><span className="text-xs text-mute">{l?.name} · {h.voice}{h.via === "Telegram" ? " · via Telegram" : ""}</span></span>
                     <span className="text-xs text-mute">{when(h.createdAt)}{h.seconds ? ` · ${h.seconds}s` : ""}</span>
                   </header>
-                  {h.sourceText && <p className="m-0 text-[13px] leading-relaxed text-mute">You wrote: {h.sourceText}</p>}
-                  <p lang={h.to} className="m-0 rounded-2xl bg-well px-4 py-3 text-[15px] leading-relaxed">{h.text}</p>
+                  <TextBlock label="ORIGINAL">{h.sourceText ?? NOT_SAVED}</TextBlock>
+                  <TextBlock label={`TRANSLATED · ${(l?.name ?? h.to).toUpperCase()}`} lang={h.to}>{h.text}</TextBlock>
                   <audio controls preload="none" src={api.speakAudio(h.id)} className="w-full" />
                   <div className="flex flex-wrap items-center gap-2.5">
                     <a href={api.speakAudio(h.id, "mp3", true)} className="inline-flex h-10 items-center rounded-full bg-ink px-5 text-[13px] font-bold text-[#0B0A18] no-underline">Download MP3</a>
