@@ -57,6 +57,21 @@ npm run client      # the web app on http://localhost:5173
 
 Open http://localhost:5173 and create an account. **The first account becomes the workspace owner.**
 
+## Deploying
+
+One container runs everything (website, API and Telegram bot). The `Dockerfile` installs ffmpeg and builds the website.
+
+1. Create a service from this repo on a host that runs Docker containers and offers a **persistent disk** (Render, Railway, Fly.io and similar).
+2. **Mount the persistent disk at `/app/work`.** Accounts, videos, dubs and voice messages are saved there. Without it, everything is lost on each restart.
+3. Set the environment variables on the host (never in the repo): `GNANI_API_KEY`, `LLM_PROVIDER`, `LLM_API_KEY`, and `TELEGRAM_BOT_TOKEN` if you want the bot. The image already sets `NODE_ENV=production`, `TRUST_PROXY=true` and `PORT=3001`.
+4. Run **exactly one instance.** Two copies would make two Telegram bots fight, and accounts are stored in a single file.
+5. Open the site and **create your account straight away: the first account becomes the owner.** Then decide on sign-up: leave it open (people can make accounts) or set `ALLOW_SIGNUP=false`.
+6. The host's health check can use `/healthz`.
+
+**Usage limits** protect your Gnani and Gemini quota. Each account gets 30 dubbing jobs and 100 voice messages a day (the Telegram bot shares three times that between all its users). Change them with `DAILY_DUB_LIMIT` and `DAILY_VOICE_LIMIT`; `0` means no limit.
+
+Without Docker: `npm install`, `npm --prefix client install`, `npm run build`, then `npm run start:prod` with the variables above set in the environment.
+
 ## Accounts
 
 Sign-in is required. Passwords are hashed with scrypt, sessions use an HttpOnly cookie, and login attempts are throttled. Members see only their own videos; the owner also sees the Telegram bot's videos.

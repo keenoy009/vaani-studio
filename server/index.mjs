@@ -9,13 +9,14 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile, readdir, mkdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join, extname, resolve } from "node:path";
+import { join, extname, resolve, dirname } from "node:path";
 import { extractAudio, transcribe, translate, voiceLine, mix, parseGlossary, missingTerms, TARGETS, SOURCES } from "../src/pipeline.mjs";
 import { duration, tts, createVoiceEmbedding } from "../src/tts.mjs";
 import { speakMessage, convertAudio, MAX_CHARS } from "../src/speak.mjs";
 import { startBot, telegramState } from "./bot.mjs";
 import { initAuth, authRouter, authenticate, requireAuth, sameOrigin, securityHeaders, canSee, INTERNAL_KEY } from "./auth.mjs";
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const PORT = process.env.PORT || 3001;
 const JOBS_DIR = resolve(process.env.JOBS_DIR || "work/jobs");
@@ -189,6 +190,7 @@ const app = express();
 if (process.env.TRUST_PROXY === "true") app.set("trust proxy", 1); // set when running behind a reverse proxy (so req.ip is the real client)
 app.disable("x-powered-by");
 app.use(securityHeaders);
+app.get("/healthz", (req, res) => res.json({ ok: true })); // for the hosting platform's health check
 app.use(express.json({ limit: "1mb" }));
 // Everything under /api needs a signed-in user, except the sign-in/sign-up routes themselves.
 app.use("/api", sameOrigin, authenticate);
@@ -215,6 +217,25 @@ const getJob = (req, res) => {
   return job;
 };
 const ownerOf = (req) => (req.user.role === "system" ? "telegram" : req.user.id);
+
+// ---------- daily usage limits ----------
+// Every dub and voice message spends the owner's Gnani + Gemini quota, so each account (and the Telegram bot as a whole) gets a daily allowance.
+// DAILY_DUB_LIMIT (default 30) and DAILY_VOICE_LIMIT (default 100) per account; the Telegram bot shares 3x that between all its users. 0 = no limit.
+const USAGE_FILE = resolve(process.env.USAGE_FILE || join(JOBS_DIR, "..", "usage.json"));
+let usage = {};
+try { usage = JSON.parse(await readFile(USAGE_FILE, "utf8")); } catch { /* first run */ }
+const limitNumber = (v, dflt) => { const n = Number(v); return Number.isFinite(n) && n >= 0 && v !== undefined && v !== "" ? n : dflt; };
+const limitFor = (kind, owner) => (kind === "dub" ? limitNumber(process.env.DAILY_DUB_LIMIT, 30) : limitNumber(process.env.DAILY_VOICE_LIMIT, 100)) * (owner === "telegram" ? 3 : 1);
+/** Spend one unit of today's allowance. Returns an error message when it is used up, otherwise null. */
+function charge(req, kind) {
+  const owner = ownerOf(req), day = new Date().toISOString().slice(0, 10), max = limitFor(kind, owner);
+  if (usage.day !== day) usage = { day };
+  const key = `${kind}:${owner}`, used = usage[key] ?? 0;
+  if (max > 0 && used >= max) return `Today's limit is used up (${max} ${kind === "dub" ? "dubbing jobs" : "voice messages"} a day). Please try again tomorrow.`;
+  usage[key] = used + 1;
+  writeFile(USAGE_FILE, JSON.stringify(usage)).catch(() => {});
+  return null;
+}
 const getLang = (req, res, job) => {
   const L = job.langs[req.params.lang];
   if (!L) res.status(404).json({ error: "Language not on this job" });
@@ -235,6 +256,8 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
   if (voice && voice !== "default" && voice !== "clone" && !VOICE_NAMES.has(voice)) return res.status(400).json({ error: `Unknown voice ${voice}` });
   if (voice === "clone" && !consent) return res.status(400).json({ error: "Copying a voice needs your confirmation that you have permission from the speaker." });
 
+  const limit = charge(req, "dub");
+  if (limit) { await rm(jobDir(req.jobId), { recursive: true, force: true }).catch(() => {}); return res.status(429).json({ error: limit }); }
   let glossary = [];
   try { glossary = parseGlossary(req.body.glossary); } catch (e) { return res.status(400).json({ error: e.message }); }
 
@@ -291,6 +314,7 @@ app.post("/api/jobs/:id/langs/:lang", async (req, res) => {
   if (req.params.lang === job.source) return res.status(400).json({ error: "That is already the spoken language of this video." });
   if (job.status !== "review") return res.status(409).json({ error: "Job is not ready yet" });
   if (job.langs[req.params.lang] && job.langs[req.params.lang].status !== "failed") return res.status(409).json({ error: "Language already added" });
+  const limit = charge(req, "dub"); if (limit) return res.status(429).json({ error: limit });
   dubLang(job, req.params.lang);
   res.status(202).json({ ok: true });
 });
@@ -371,6 +395,7 @@ async function makeSample(job) {
 }
 
 app.post("/api/samples", async (req, res) => {
+  const limit = charge(req, "dub"); if (limit) return res.status(429).json({ error: limit });
   const id = randomUUID();
   await mkdir(jobDir(id), { recursive: true });
   const job = {
@@ -401,6 +426,7 @@ app.post("/api/speak", async (req, res) => {
   let glossary = [];
   try { glossary = parseGlossary(req.body.glossary); } catch (e) { return res.status(400).json({ error: e.message }); }
   if ((speakBusy.get(owner) ?? 0) >= 4) return res.status(429).json({ error: "Too many voice messages at once. Wait a moment and try again." });
+  const limit = charge(req, "voice"); if (limit) return res.status(429).json({ error: limit });
   speakBusy.set(owner, (speakBusy.get(owner) ?? 0) + 1);
   const id = randomUUID(), dir = join(SPEAK_DIR, id);
   try {
@@ -509,6 +535,15 @@ const tgState = async () => telegramState();
 app.get("/api/telegram", async (req, res) => res.json(await tgState()));
 
 // Basic error handler (e.g. upload too large)
+// ---------- the website itself (after `npm run build`); in development Vite serves it instead ----------
+const DIST = resolve(dirname(fileURLToPath(import.meta.url)), "..", "client", "dist");
+if (existsSync(join(DIST, "index.html"))) {
+  app.use("/assets", express.static(join(DIST, "assets"), { immutable: true, maxAge: "1y" })); // file names contain a content hash
+  app.use(express.static(DIST, { index: false, maxAge: "1h" }));
+  app.get(/^\/(?!api\/).*/, (req, res) => res.set("Cache-Control", "no-cache").sendFile(join(DIST, "index.html")));
+  console.log("Serving the website from client/dist");
+}
+
 app.use((err, req, res, next) => {
   if (err.code === "LIMIT_FILE_SIZE") return res.status(413).json({ error: "File too large (max 200 MB)" });
   console.error(err);

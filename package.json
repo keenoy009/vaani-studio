@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node --env-file=.env server/index.mjs",
+    "build": "npm --prefix client run build",
+    "start:prod": "node server/index.mjs",
     "client": "npm --prefix client run dev",
     "reset-password": "node scripts/reset-password.mjs"
   },
