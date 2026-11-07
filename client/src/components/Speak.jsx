@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { api, LANGS } from "../api.js";
-import { GlossaryInput } from "./Glossary.jsx";
 
 const MAX = 1200;
 const AT_ONCE = 2; // how many languages are voiced at the same time
@@ -14,7 +13,6 @@ export default function Speak({ onError }) {
   const [targets, setTargets] = useState(["kn"]);
   const [voices, setVoices] = useState([]);
   const [voice, setVoice] = useState("Shivani");
-  const [words, setWords] = useState("");
   const [results, setResults] = useState({}); // lang id -> { status: "working" | "done" | "failed", ... }
   const [busy, setBusy] = useState(false);
   const run = useRef(0); // a new run makes older ones stop updating the screen
@@ -27,7 +25,7 @@ export default function Speak({ onError }) {
   const voiceOne = async (lang, myRun) => {
     const set = (v) => { if (run.current === myRun) setResults((r) => ({ ...r, [lang]: v })); };
     set({ status: "working" });
-    try { set({ status: "done", ...(await api.speak({ text, from, to: lang, voice, glossary: words })) }); }
+    try { set({ status: "done", ...(await api.speak({ text, from, to: lang, voice })) }); }
     catch (e) { set({ status: "failed", error: e.message }); }
   };
   const go = async () => {
@@ -96,14 +94,6 @@ export default function Speak({ onError }) {
           </select>
           {voiceInfo && <span className="text-[11px] text-mute">{voiceInfo.name} sounds {voiceInfo.persona.toLowerCase()}. Studio voices only here; copying a real person's voice needs a video of them.</span>}
         </div>
-
-        <details className="flex flex-col gap-3 rounded-2xl border border-[#262B40] bg-[#12141D] px-4 py-3" open={!!words}>
-          <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold">
-            <span>Keep these words <span className="font-normal text-mute">· optional</span></span>
-            <span className="text-xs font-bold text-lav">{words.trim() ? "On" : "Add"}</span>
-          </summary>
-          <div className="pt-3"><GlossaryInput value={words} onChange={setWords} rows={3} /></div>
-        </details>
 
         <button type="button" disabled={!canGo} onClick={go}
           className="flex h-14 items-center justify-center gap-2 rounded-full border-0 text-[15px] font-extrabold"

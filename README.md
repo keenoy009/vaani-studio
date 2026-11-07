@@ -15,7 +15,7 @@ Lines stay editable; edit one and click Re-render.
 
 ## Voice a message (no video)
 
-Open **Voice message** in the left menu, type or paste a message (up to 1,200 characters), choose one or more languages and a studio voice, and get translated speech back: play it in the page or download an MP3 or WAV. The keep-these-words list works here too. Voice cloning is not offered here, because it needs a video of the speaker.
+Open **Voice message** in the left menu, type or paste a message (up to 1,200 characters), choose one or more languages and a studio voice, and get translated speech back: play it in the page or download an MP3 or WAV. Voice cloning is not offered here, because it needs a video of the speaker.
 
 In **Telegram**, send the bot plain text in a private chat (in a group: `/say your text`, or reply to a message with `/say`). Choose the language and voice, and the bot sends back a voice note.
 

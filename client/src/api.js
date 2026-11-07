@@ -11,11 +11,10 @@ const json = (method, body) => ({ method, headers: { "Content-Type": "applicatio
 const L = (id, lang) => `/api/jobs/${id}/langs/${lang}`;
 
 export const api = {
-  create(file, source, targets, glossary = "") {
+  create(file, source, targets) {
     const fd = new FormData();
     fd.append("source", source);
     fd.append("targets", targets.join(","));
-    if (glossary.trim()) fd.append("glossary", glossary);
     fd.append("video", file); // file last so text fields are parsed first
     return fetch("/api/jobs", { method: "POST", body: fd }).then(handle);
   },
@@ -39,7 +38,6 @@ export const api = {
   jobVoices: (id) => fetch(`/api/jobs/${id}/voices`).then(handle),
   speak: (body) => fetch("/api/speak", json("POST", body)).then(handle),
   speakAudio: (id, format = "mp3", download = false) => `/api/speak/${id}/audio?format=${format}${download ? "&download=1" : ""}`,
-  setGlossary: (id, glossary) => fetch(`/api/jobs/${id}/glossary`, json("PUT", { glossary })).then(handle),
   setVoices: (id, body) => fetch(`/api/jobs/${id}/voices`, json("PUT", body)).then(handle),
   telegram: () => fetch("/api/telegram").then(handle),
   originalUrl: (id) => `/api/jobs/${id}/video`,
