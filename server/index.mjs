@@ -196,6 +196,9 @@ app.use(express.json({ limit: "1mb" }));
 app.use("/api", sameOrigin, authenticate);
 app.use("/api/auth", authRouter);
 app.use("/api", requireAuth);
+// Telegram -> us, in webhook mode. grammY checks the secret header; until the bot is ready we answer 503 so Telegram retries.
+let telegramHook = null;
+app.post("/telegram/webhook", (req, res, next) => (telegramHook ? telegramHook(req, res, next) : res.sendStatus(503)));
 
 const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },
@@ -552,6 +555,7 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Vaani Studio API on http://localhost:${PORT}`);
-  if (process.env.TELEGRAM_BOT_TOKEN) startBot({ token: process.env.TELEGRAM_BOT_TOKEN, apiBase: `http://localhost:${PORT}`, internalKey: INTERNAL_KEY });
+  const publicUrl = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL; // set => webhook mode (free hosts that sleep)
+  if (process.env.TELEGRAM_BOT_TOKEN) startBot({ token: process.env.TELEGRAM_BOT_TOKEN, apiBase: `http://localhost:${PORT}`, internalKey: INTERNAL_KEY, publicUrl }).then((b) => { telegramHook = b?.webhookHandler ?? null; });
   else console.log("[bot] TELEGRAM_BOT_TOKEN is not set, so the Telegram bot is off.");
 });

@@ -1,0 +1,20 @@
+# Free, Telegram-only deployment on Render (see "Free deployment" in the README).
+# The free plan has no persistent disk and sleeps when idle, so: the bot uses a webhook (Telegram wakes the app),
+# and sign-ups are closed (nobody needs a website account; people use the bot).
+services:
+  - type: web
+    name: vaani-studio
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: GNANI_API_KEY
+        sync: false          # you type it in the Render dashboard, it is never stored in this repo
+      - key: LLM_API_KEY
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: ALLOW_SIGNUP
+        value: "false"

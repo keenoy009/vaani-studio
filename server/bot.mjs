@@ -3,9 +3,9 @@
 //
 // Flow:  video -> "which language is spoken?" -> "dub into?" -> live progress -> dubbed video
 //        + [Share to group] [Change language]
-import { Bot, InlineKeyboard, InputFile } from "grammy";
+import { Bot, InlineKeyboard, InputFile, webhookCallback } from "grammy";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { resolve, dirname } from "node:path";
 
 const STATE_FILE = resolve("work/telegram.json");
@@ -446,7 +446,15 @@ export function createBot({ token, apiBase, download, botInfo, internalKey }) {
 }
 
 // ---------- start / use from the server ----------
-export async function startBot({ token, apiBase, internalKey }) {
+export const WEBHOOK_PATH = "/telegram/webhook";
+const UPDATE_TYPES = ["message", "callback_query", "my_chat_member"];
+// Telegram sends this secret in a header with every webhook call, so nobody else can feed the bot fake updates.
+export const webhookSecret = (token) => createHash("sha256").update("vaani-webhook:" + token).digest("hex").slice(0, 48);
+// A dub takes minutes, but Telegram wants an answer within seconds (or it re-sends the update and we would dub twice).
+// So answer 200 after 5 s and let the work carry on in the background.
+export const makeWebhookHandler = (bot, token) => webhookCallback(bot, "express", { secretToken: webhookSecret(token), timeoutMilliseconds: 5000, onTimeout: "return" });
+
+export async function startBot({ token, apiBase, internalKey, publicUrl }) {
   await loadState();
   const bot = createBot({ token, apiBase, internalKey });
   try { await bot.init(); } catch (e) { console.error("[bot] Telegram rejected the token:", e.description || e.message); return null; }
@@ -456,7 +464,14 @@ export async function startBot({ token, apiBase, internalKey }) {
     { command: "say", description: "Speak a text in another language: /say your text" },
     { command: "start", description: "How to use Vaani" }, { command: "help", description: "Help" },
   ]).catch(() => {});
-  bot.start({ allowed_updates: ["message", "callback_query", "my_chat_member"], onStart: () => { running = true; console.log(`[bot] online as @${botUsername}`); } })
+  if (publicUrl) { // webhook mode (free hosts that sleep): Telegram calls us, so a sleeping app wakes up
+    try { await bot.api.setWebhook(publicUrl.replace(/\/$/, "") + WEBHOOK_PATH, { allowed_updates: UPDATE_TYPES, secret_token: webhookSecret(token) }); }
+    catch (e) { console.error("[bot] could not set the Telegram webhook:", e.description || e.message); return null; }
+    bot.webhookHandler = makeWebhookHandler(bot, token);
+    running = true; console.log(`[bot] online as @${botUsername} (webhook)`);
+    return bot;
+  }
+  bot.start({ allowed_updates: UPDATE_TYPES, onStart: () => { running = true; console.log(`[bot] online as @${botUsername}`); } })
     .catch((e) => { running = false; console.error("[bot] stopped:", e.description || e.message); })
     .finally(() => { running = false; });
   process.once("SIGINT", () => bot.stop());
