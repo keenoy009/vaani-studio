@@ -61,6 +61,7 @@ export default function Review({ job, langId, L, actions, seek }) {
                   <span className="h-2 w-2 rounded-full" style={{ background: DOTS[speakers.indexOf(l.speaker) % DOTS.length] }} />
                   Speaker {speakers.indexOf(l.speaker) + 1} · <span className="font-mono">{fmt(l.start)}–{fmt(l.end)}</span>
                   {l.edited && <span className="rounded-full bg-lav/15 px-2 py-0.5 text-[11px] font-bold text-lav">edited</span>}
+                  {l.termsMissed?.length > 0 && <span className="rounded-full bg-pink/15 px-2 py-0.5 text-[11px] font-bold text-pink" title={"The word list was not followed on this line. Missing: " + l.termsMissed.join(", ") + ". Edit the line to put it back."}>missing: {l.termsMissed.join(", ")}</span>}
                   {l.shortened && <span className="rounded-full bg-peach/15 px-2 py-0.5 text-[11px] font-bold text-peach" title="The translation was too long for its time slot, so it was shortened automatically">shortened to fit</span>}
                   {l.lengthened && <span className="rounded-full bg-peach/15 px-2 py-0.5 text-[11px] font-bold text-peach" title="The translation was much shorter than the original speech, so it was reworded a little fuller to avoid a silent gap">lengthened to fit</span>}
                 </div>

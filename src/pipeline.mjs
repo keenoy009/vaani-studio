@@ -111,26 +111,67 @@ function inRightScript(text, target) {
   return nonLatin.length > 0 && nonLatin.every((c) => inScript.test(c)); // at least one target letter, none from other scripts
 }
 
-/** LLM translate. Returns lines [{...segment, source_text, text, lang, edited}]. */
-export async function translate(segments, targetKey, sourceKey = "hi") {
+// ---------- "Keep these words" list ----------
+// Each entry is { from, to }: wherever the speaker says `from`, the dub must contain `to` exactly (e.g. a drug or place name).
+// A plain entry such as "Paracetamol" means from = to.
+export function parseGlossary(input) {
+  const raw = Array.isArray(input) ? input : String(input ?? "").split(/[\n;,]+/);
+  const out = [], seen = new Set();
+  for (const item of raw) {
+    let from, to;
+    if (item && typeof item === "object") ({ from, to } = item);
+    else { const [a, ...b] = String(item).split(/=|→|->/); from = a; to = b.length ? b.join("=") : a; }
+    from = String(from ?? "").trim().replace(/\s+/g, " "); to = String(to ?? "").trim().replace(/\s+/g, " ");
+    if (!from || !to) continue;
+    if (from.length > 60 || to.length > 60) throw new Error("Each word in the list must be 60 characters or fewer.");
+    if (seen.has(from.toLowerCase())) continue;
+    seen.add(from.toLowerCase()); out.push({ from, to });
+  }
+  if (out.length > 30) throw new Error("Keep the list to 30 words or fewer.");
+  return out;
+}
+const hasTerm = (text, term) => text.toLowerCase().includes(term.toLowerCase());
+/** The terms from the list that this source line actually contains: the dub of this line must contain their `to`. */
+export const termsFor = (sourceText, glossary = []) => glossary.filter((g) => hasTerm(sourceText, g.from)).map((g) => g.to);
+/** Text with the kept terms removed, so a term written in another script doesn't fail the "right script" check. */
+const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const withoutTerms = (text, keep = []) => keep.reduce((acc, k) => acc.replace(new RegExp(escapeRe(k), "gi"), " "), text);
+export const missingTerms = (text, keep = []) => keep.filter((k) => !hasTerm(text, k));
+
+/** LLM translate. Returns lines [{...segment, source_text, text, lang, edited, keep, termsMissed}]. */
+export async function translate(segments, targetKey, sourceKey = "hi", glossary = []) {
   const t = TARGETS[targetKey], s = SOURCES[sourceKey];
+  const keepNote = glossary.length
+    ? `KEEP-WORDS: when the speaker says one of these words, write it in the dub EXACTLY as given, unchanged, not translated or respelled: ` +
+      glossary.map((g) => `"${g.from}" -> "${g.to}"`).join(", ") + `. `
+    : "";
   const system =
     `You are a professional dubbing translator. Translate ${s.name} speech into natural, spoken ${t.name} for a voice-over. ` +
     (t.note ?? "") +
     `The output MUST be written in the native ${t.name} script (for example "${t.example}"), NOT Bengali, Devanagari, or Latin letters` +
     (t.note ? " (Devanagari is correct for Konkani)" : "") + `. ` +
+    keepNote +
     `Rules: keep the meaning; use simple everyday words suitable for health workers, farmers and students; keep each line about as long ` +
     `as the original when spoken, because it must fit the same time slot; write numbers as spoken words; do not add explanations. ` +
     `Reply ONLY with JSON: an array of objects {"id": number, "text": string}, one per input line, same ids.`;
   const user = JSON.stringify(segments.map((x) => ({ id: x.id, seconds: +(x.end - x.start).toFixed(2), source: x.text })));
+  let best = null; // the best answer whose script was right but which dropped a kept word (used only if no attempt is perfect)
   for (let attempt = 1; attempt <= 3; attempt++) {
     const result = await askJson(system, user);
     const byId = new Map(result.map((r) => [r.id, r.text]));
+    const keepOf = new Map(segments.map((x) => [x.id, termsFor(x.text, glossary)]));
     const same = (x) => (byId.get(x.id) ?? "").trim() === x.text.trim(); // untranslated copy of the source
-    if (segments.every((x) => inRightScript(byId.get(x.id) ?? "", t) && !same(x))) {
-      return segments.map((x) => ({ ...x, source_text: x.text, text: byId.get(x.id), lang: t.code, edited: false }));
-    }
+    const scriptOk = segments.every((x) => inRightScript(withoutTerms(byId.get(x.id) ?? "", keepOf.get(x.id)), t) && !same(x));
+    if (!scriptOk) continue;
+    const lines = segments.map((x) => {
+      const text = byId.get(x.id), keep = keepOf.get(x.id);
+      return { ...x, source_text: x.text, text, lang: t.code, edited: false, keep, termsMissed: missingTerms(text, keep) };
+    });
+    const misses = lines.reduce((n, l) => n + l.termsMissed.length, 0);
+    if (!misses) return lines;
+    if (!best || misses < best.misses) best = { lines, misses };
   }
+  if (best) return best.lines; // kept going wrong on a listed word: deliver, but the line is flagged in the Studio
   throw new Error(`LLM kept returning the wrong script for ${t.name}`);
 }
 
@@ -138,7 +179,8 @@ async function shorten(line, slot, target) {
   const targetChars = Math.floor(line.text.length * ((slot * 1.1) / line.tts_seconds));
   const system =
     `You shorten ${target.name} dubbing lines. Keep the key meaning and the native ${target.name} script, but make it MUCH shorter: ` +
-    `at most ${targetChars} characters (currently ${line.text.length}). Drop greetings and filler before dropping facts. Reply ONLY with JSON: {"text": string}.`;
+    `at most ${targetChars} characters (currently ${line.text.length}). Drop greetings and filler before dropping facts. ` +
+    (line.keep?.length ? `Keep these words exactly as written: ${line.keep.map((k) => `"${k}"`).join(", ")}. ` : "") + `Reply ONLY with JSON: {"text": string}.`;
   return (await askJson(system, JSON.stringify({ original: line.source_text, current: line.text }))).text;
 }
 
@@ -149,7 +191,8 @@ async function lengthen(line, slot, target) {
     `You make ${target.name} dubbing lines a little longer so they fill the time the original speaker took. Keep exactly the same meaning and facts, ` +
     `in the native ${target.name} script. Do NOT add new information, examples or opinions: only use fuller, natural spoken phrasing ` +
     `(for example polite connectors, complete forms, or stating the same idea more completely). Aim for about ${wanted} characters ` +
-    `(currently ${line.text.length}). Reply ONLY with JSON: {"text": string}.`;
+    `(currently ${line.text.length}). ` +
+    (line.keep?.length ? `Keep these words exactly as written: ${line.keep.map((k) => `"${k}"`).join(", ")}. ` : "") + `Reply ONLY with JSON: {"text": string}.`;
   return (await askJson(system, JSON.stringify({ original: line.source_text, current: line.text }))).text;
 }
 
@@ -168,7 +211,7 @@ export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoF
     let shorter;
     try { shorter = await shorten({ ...line, tts_file: raw }, slot, t); }
     catch { break; } // shortening is a nice-to-have: if the LLM is down, keep the line and just speed it up
-    if (!shorter || !inRightScript(shorter, t) || shorter.length >= line.text.length) continue;
+    if (!shorter || !inRightScript(withoutTerms(shorter, line.keep), t) || shorter.length >= line.text.length || missingTerms(shorter, line.keep).length > missingTerms(line.text, line.keep).length) continue;
     line.text = shorter;
     line.shortened = true; line.lengthened = false; // machine-shortened to fit the time slot (the UI shows a tag)
     await writeFile(raw, await tts(line.text, t.tts ?? t.code, voice));
@@ -180,7 +223,7 @@ export async function voiceLine(line, targetKey, dir, voice = "Shivani", { autoF
     try { longer = await lengthen(line, slot, t); }
     catch (e) { if (/busy right now/.test(e.message)) break; continue; } // nice-to-have: give up if the AI is overloaded, otherwise try again
     // (the real limit is how long the speech turns out to be, checked below; 3x is only a sanity guard)
-    if (!longer || !inRightScript(longer, t) || longer.length <= line.text.length || longer.length > line.text.length * 3) continue;
+    if (!longer || !inRightScript(withoutTerms(longer, line.keep), t) || longer.length <= line.text.length || longer.length > line.text.length * 3 || missingTerms(longer, line.keep).length > missingTerms(line.text, line.keep).length) continue;
     const buf = await tts(longer, t.tts ?? t.code, voice);
     const probe = join(dir, `tts_${line.id}_try.wav`);
     await writeFile(probe, buf);

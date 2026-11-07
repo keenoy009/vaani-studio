@@ -9,6 +9,7 @@ import Timing from "./components/Timing.jsx";
 import Review from "./components/Review.jsx";
 import Telegram, { useTelegram } from "./components/Telegram.jsx";
 import VoiceBar from "./components/VoiceBar.jsx";
+import { GlossaryCard } from "./components/Glossary.jsx";
 import { Library, Settings, BotPage } from "./components/Pages.jsx";
 
 const store = (key) => ({
@@ -107,7 +108,7 @@ function Studio({ user, onSignOut }) {
   };
 
   const open = (id) => { jobStore.set(id); setJobId(id); setJob(null); setLang(null); setMode("orig"); setT(0); setPage("studio"); };
-  const onUpload = guard(async (file, source, targets) => { open((await api.create(file, source, targets)).id); });
+  const onUpload = guard(async (file, source, targets, glossary) => { open((await api.create(file, source, targets, glossary)).id); });
   const onSample = guard(async () => { open((await api.sample()).id); });
   const newDub = () => { jobStore.set(null); setJobId(null); setJob(null); setLang(null); setErr(""); setPage("studio"); };
 
@@ -206,6 +207,7 @@ function Studio({ user, onSignOut }) {
                       })}
                     </div>
                     <VoiceBar job={job} L={L} onChanged={refresh} onRender={actions.render} onError={setErr} />
+                    <GlossaryCard job={job} onChanged={refresh} onError={setErr} />
                   </section>
 
                   <Review job={job} langId={lang} L={L} actions={actions} seek={(s) => playerRef.current?.seek(s)} />

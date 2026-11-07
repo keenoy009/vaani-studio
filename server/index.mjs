@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, writeFile, readdir, mkdir, rm } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
-import { extractAudio, transcribe, translate, voiceLine, mix, TARGETS, SOURCES } from "../src/pipeline.mjs";
+import { extractAudio, transcribe, translate, voiceLine, mix, parseGlossary, missingTerms, TARGETS, SOURCES } from "../src/pipeline.mjs";
 import { duration, tts, createVoiceEmbedding } from "../src/tts.mjs";
 import { startBot, telegramState } from "./bot.mjs";
 import { initAuth, authRouter, authenticate, requireAuth, sameOrigin, securityHeaders, canSee, INTERNAL_KEY } from "./auth.mjs";
@@ -102,7 +102,7 @@ async function translateLang(job, lang) {
   job.langs[lang] = { status: "translating", lines: [], dubbed: false, error: null };
   await save(job);
   try {
-    job.langs[lang].lines = await translate(job.segments, lang, job.source);
+    job.langs[lang].lines = await translate(job.segments, lang, job.source, job.glossary ?? []);
     job.langs[lang].status = "review";
   } catch (e) {
     job.langs[lang].status = "failed";
@@ -232,8 +232,11 @@ app.post("/api/jobs", upload.single("video"), async (req, res) => {
   if (voice && voice !== "default" && voice !== "clone" && !VOICE_NAMES.has(voice)) return res.status(400).json({ error: `Unknown voice ${voice}` });
   if (voice === "clone" && !consent) return res.status(400).json({ error: "Copying a voice needs your confirmation that you have permission from the speaker." });
 
+  let glossary = [];
+  try { glossary = parseGlossary(req.body.glossary); } catch (e) { return res.status(400).json({ error: e.message }); }
+
   const job = {
-    id: req.jobId, ownerId: ownerOf(req), status: "processing", stage: "audio", error: null, source,
+    id: req.jobId, glossary, ownerId: ownerOf(req), status: "processing", stage: "audio", error: null, source,
     originalName: req.file.originalname, videoFile: req.file.filename,
     createdAt: new Date().toISOString(), duration: null, segments: [], langs: {},
     voiceChoice: voice && voice !== "default" ? voice : null, cloneConsent: voice === "clone" ? true : false,
@@ -289,6 +292,15 @@ app.post("/api/jobs/:id/langs/:lang", async (req, res) => {
   res.status(202).json({ ok: true });
 });
 
+// The "keep these words" list. Body: { glossary: "Paracetamol, spoken word = kept word" } (one per line or comma, or an array). It applies to languages dubbed from now on;
+// a language that is already dubbed keeps its wording (edit its lines, or delete and add the language again).
+app.put("/api/jobs/:id/glossary", async (req, res) => {
+  const job = getJob(req, res); if (!job) return;
+  try { job.glossary = parseGlossary(req.body?.glossary); } catch (e) { return res.status(400).json({ error: e.message }); }
+  await save(job);
+  res.json({ glossary: job.glossary });
+});
+
 // Edit a line's text -> marks it edited and invalidates the dub (the user re-renders afterwards)
 app.patch("/api/jobs/:id/langs/:lang/lines/:lineId", async (req, res) => {
   const job = getJob(req, res); if (!job) return;
@@ -298,7 +310,7 @@ app.patch("/api/jobs/:id/langs/:lang/lines/:lineId", async (req, res) => {
   if (!line) return res.status(404).json({ error: "Line not found" });
   const text = typeof req.body.text === "string" ? req.body.text.trim() : "";
   if (!text || text.length > 1000) return res.status(400).json({ error: "text must be 1-1000 characters" });
-  if (text !== line.text) { line.text = text; line.edited = true; line.shortened = false; L.dubbed = false; L.status = "review"; }
+  if (text !== line.text) { line.text = text; line.edited = true; line.termsMissed = missingTerms(text, line.keep); line.shortened = false; L.dubbed = false; L.status = "review"; }
   await save(job);
   res.json(publicLine(line));
 });

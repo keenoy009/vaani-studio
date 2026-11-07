@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { LANGS, SOURCES, fmt } from "../api.js";
+import { GlossaryInput } from "./Glossary.jsx";
 
 const OK = /\.(mp4|mov|mkv|webm|m4v)$/i;
 const MAX_SECONDS = 290; // the server rejects clips longer than this (Gnani direct-upload limit)
@@ -22,6 +23,7 @@ export default function Upload({ onUpload, onSample }) {
   const [seconds, setSeconds] = useState(null);
   const [source, setSource] = useState("hi");
   const [targets, setTargets] = useState(["kn"]);
+  const [glossary, setGlossary] = useState("");
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -52,7 +54,7 @@ export default function Upload({ onUpload, onSample }) {
   const tooLong = seconds != null && seconds > MAX_SECONDS;
   const tooBig = file && file.size > MAX_MB * 1048576;
   const canStart = !!file && !tooLong && !tooBig && !busy && targets.length > 0;
-  const go = async () => { setBusy(true); await onUpload(file, source, targets); setBusy(false); };
+  const go = async () => { setBusy(true); await onUpload(file, source, targets, glossary); setBusy(false); };
   const names = targets.map((id) => LANGS.find((l) => l.id === id)?.name).join(", ");
 
   return (
@@ -146,6 +148,14 @@ export default function Upload({ onUpload, onSample }) {
               })}
             </div>
           </div>
+
+          <details className="flex flex-col gap-3 rounded-2xl border border-[#262B40] bg-[#12141D] px-4 py-3" open={!!glossary}>
+            <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-bold">
+              <span>Keep these words <span className="font-normal text-mute">· optional</span></span>
+              <span className="text-xs font-bold text-lav">{glossary.trim() ? glossary.split(/\r?\n/).filter((x) => x.trim()).length + " added" : "Add"}</span>
+            </summary>
+            <div className="pt-3"><GlossaryInput value={glossary} onChange={setGlossary} rows={3} /></div>
+          </details>
 
           <div className="flex flex-col gap-3 border-t border-line pt-5">
             <div className="flex items-center justify-between gap-3 rounded-2xl bg-well px-4 py-3 text-[13px]">
