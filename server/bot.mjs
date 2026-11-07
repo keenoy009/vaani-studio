@@ -90,8 +90,8 @@ export function createBot({ token, apiBase, download, botInfo, internalKey }) {
 
   // The bot is not a signed-in person: it identifies itself to the Studio API with a secret only this server process knows.
   const internal = internalKey ? { "X-Internal-Key": internalKey } : {};
-  const apiJson = async (method, path, body) => {
-    const r = await fetch(apiBase + path, { method, signal: AbortSignal.timeout(60000), headers: { ...internal, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  const apiJson = async (method, path, body, timeout = 60000) => {
+    const r = await fetch(apiBase + path, { method, signal: AbortSignal.timeout(timeout), headers: { ...internal, ...(body ? { "Content-Type": "application/json" } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
     return j;
@@ -171,7 +171,7 @@ export function createBot({ token, apiBase, download, botInfo, internalKey }) {
   }
 
   // ----- commands -----
-  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.\n\nYou can pick the voice too, or have me match the original speaker's voice.";
+  const welcome = "Hi, I'm Vaani 🎙️\n\nSend me a short video (up to 5 minutes and 20 MB) and I'll dub it into an Indian language: Kannada, Tamil, Telugu, Marathi, Malayalam, Bengali, Gujarati, Punjabi, Hindi or English.\n\nYou can pick the voice too, or have me match the original speaker's voice.\n\n🗣 You can also send me a piece of TEXT and I'll speak it in any of these languages as a voice note (in a group: /say your text).";
   // Telegram "privacy mode" hides ordinary group messages (like a video) from a bot unless the bot is a group admin.
   // Commands always arrive, so "/dub" as a reply to a video is the way that always works.
   async function seesAllMessages(ctx) {
@@ -227,8 +227,78 @@ export function createBot({ token, apiBase, download, botInfo, internalKey }) {
     ? onMedia(ctx, ctx.msg.document)
     : ctx.chat.type === "private" ? ctx.reply("I can only dub videos. Please send an MP4 or other video file.") : undefined));
   bot.on("message:animation", (ctx) => onMedia(ctx, ctx.msg.animation)); // some apps send short videos as "animations"
+  // ----- text arrives: speak it as a voice note (private chat: just send text; groups: /say your text, or reply to a message with /say) -----
+  const SAY_LIMIT = 1200;
+  async function onText(ctx, text, replyTo = ctx.msg.message_id) {
+    text = String(text ?? "").trim();
+    if (!text) return ctx.reply("Send me some text after /say, or reply to a message with /say.", { reply_parameters: { message_id: ctx.msg.message_id, allow_sending_without_reply: true } });
+    if (text.length > SAY_LIMIT) return ctx.reply(`That message is ${text.length} characters. I can voice up to ${SAY_LIMIT}, so please shorten it.`);
+    prune();
+    const key = newKey();
+    pending.set(key, { kind: "say", text, userName: ctx.from?.first_name || "Someone", userId: ctx.from?.id, chatId: ctx.chat.id, chatType: ctx.chat.type, started: false, at: Date.now() });
+    await ctx.reply("Which language should I speak it in? (I'll translate it if needed.)", {
+      reply_markup: langKeyboard(TARGETS, `xl:${key}`), reply_parameters: { message_id: replyTo, allow_sending_without_reply: true },
+    });
+  }
+  bot.command("say", (ctx) => {
+    const r = ctx.msg.reply_to_message;
+    return onText(ctx, ctx.match?.trim() || r?.text || r?.caption, r?.message_id ?? ctx.msg.message_id);
+  });
+  bot.on("message:text", (ctx) => {
+    if (ctx.msg.text.startsWith("/")) return ctx.chat.type === "private" ? ctx.reply("I don't know that command. Send a video to dub it, or some text to hear it spoken.") : undefined;
+    if (ctx.chat.type === "private") return onText(ctx, ctx.msg.text);
+  });
+
   // Anything else in a private chat still gets an answer, so the bot never looks dead.
-  bot.on("message", (ctx) => (ctx.chat.type === "private" ? ctx.reply("I can dub videos. Please send me a video (MP4 or similar, up to 5 minutes and 20 MB).") : undefined));
+  bot.on("message", (ctx) => (ctx.chat.type === "private" ? ctx.reply("I can dub videos and speak text. Please send me a video (MP4 or similar, up to 5 minutes and 20 MB), or some text.") : undefined));
+
+  // ----- say-text buttons: language -> voice -> voice note -----
+  const SAY_VOICES = VOICE_CHOICES.map(([n]) => n);
+  bot.callbackQuery(/^xl:([0-9a-f]{8}):([a-z]{2,3})$/, async (ctx) => {
+    const [, key, lang] = ctx.match;
+    const p = pending.get(key);
+    if (!(await mine(ctx, p))) return;
+    const chatId = ctx.callbackQuery.message.chat.id, msgId = ctx.callbackQuery.message.message_id;
+    if (!p || p.kind !== "say" || !TARGETS.includes(lang)) return edit(ctx.api, chatId, msgId, "This request has expired. Please send the text again.");
+    p.lang = lang; p.started = false;
+    const kb = new InlineKeyboard().text("Default voice", `xv:${key}:default`).row();
+    VOICE_CHOICES.forEach(([name, icon], i) => { kb.text(`${icon} ${name}`, `xv:${key}:${name}`); if (i % 3 === 2) kb.row(); });
+    await edit(ctx.api, chatId, msgId, `Speak in ${LANGS[lang][1]}. Which voice?\n\n` + VOICE_CHOICES.map(([name, icon, style]) => `${icon} ${name}: ${style}`).join("\n"), { reply_markup: kb });
+  });
+  bot.callbackQuery(/^xv:([0-9a-f]{8}):(\w+)$/, async (ctx) => {
+    const [, key, voice] = ctx.match;
+    const p = pending.get(key);
+    if (!(await mine(ctx, p))) return;
+    const chatId = ctx.callbackQuery.message.chat.id, msgId = ctx.callbackQuery.message.message_id;
+    if (!p || p.kind !== "say" || !p.lang || (voice !== "default" && !SAY_VOICES.includes(voice))) return edit(ctx.api, chatId, msgId, "This request has expired. Please send the text again.");
+    if (p.started) return; // double tap
+    p.started = true;
+    const lang = p.lang;
+    await upsertViewer(key, { name: p.userName, what: `Voice message → ${LANGS[lang][1]}`, state: "Speaking", at: new Date().toISOString() });
+    await edit(ctx.api, chatId, msgId, "⏳ Translating and recording your message…");
+    try {
+      const r = await apiJson("POST", "/api/speak", { text: p.text, to: lang, voice }, 150000);
+      const a = await fetch(`${apiBase}/api/speak/${r.id}/audio?format=ogg`, { headers: internal, signal: AbortSignal.timeout(60000) });
+      if (!a.ok) throw new Error("The audio is not available any more.");
+      const kb = new InlineKeyboard().text("Another language", `xa:${key}`);
+      await ctx.api.sendVoice(chatId, new InputFile(Buffer.from(await a.arrayBuffer()), "message.ogg"), {
+        caption: `${LANGS[lang][0]}: ${r.text}`.slice(0, 1000), duration: Math.round(r.seconds), reply_markup: kb,
+      });
+      await ctx.api.deleteMessage(chatId, msgId).catch(() => {});
+      p.started = false; p.at = Date.now(); // keep the text for an hour so "Another language" works
+      await upsertViewer(key, { state: "Done" });
+    } catch (e) {
+      p.started = false;
+      await edit(ctx.api, chatId, msgId, `😕 Sorry, that didn't work.\n${friendly(e)}`);
+      await upsertViewer(key, { state: "Failed" });
+    }
+  });
+  bot.callbackQuery(/^xa:([0-9a-f]{8})$/, async (ctx) => {
+    const p = pending.get(ctx.match[1]);
+    if (!(await mine(ctx, p))) return;
+    if (!p || p.kind !== "say") return ctx.reply("That message has expired. Please send the text again.");
+    await ctx.reply("Speak it in which language?", { reply_markup: langKeyboard(TARGETS, `xl:${ctx.match[1]}`) });
+  });
 
   // ----- button: spoken language -----
   bot.callbackQuery(/^s:([0-9a-f]{8}):([a-z]{2})$/, async (ctx) => {
@@ -383,6 +453,7 @@ export async function startBot({ token, apiBase, internalKey }) {
   botUsername = bot.botInfo.username;
   await bot.api.setMyCommands([
     { command: "dub", description: "Reply to a video with /dub to dub it" },
+    { command: "say", description: "Speak a text in another language: /say your text" },
     { command: "start", description: "How to use Vaani" }, { command: "help", description: "Help" },
   ]).catch(() => {});
   bot.start({ allowed_updates: ["message", "callback_query", "my_chat_member"], onStart: () => { running = true; console.log(`[bot] online as @${botUsername}`); } })

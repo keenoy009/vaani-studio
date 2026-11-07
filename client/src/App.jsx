@@ -11,6 +11,7 @@ import Telegram, { useTelegram } from "./components/Telegram.jsx";
 import VoiceBar from "./components/VoiceBar.jsx";
 import { GlossaryCard } from "./components/Glossary.jsx";
 import { Library, Settings, BotPage } from "./components/Pages.jsx";
+import Speak from "./components/Speak.jsx";
 
 const store = (key) => ({
   get: () => { try { return localStorage.getItem(key); } catch { return null; } },
@@ -19,11 +20,12 @@ const store = (key) => ({
 
 const NAV = [
   { id: "studio", label: "Studio", d: "M4 12h2M8 8v8M12 4v16M16 8v8M20 12h-2" },
+  { id: "speak", label: "Voice message", d: "M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM6 11a6 6 0 0 0 12 0M12 17v4" },
   { id: "library", label: "Library", d: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
   { id: "bot", label: "Telegram bot", d: "M21 3 10 14M21 3l-7 18-4-7-7-4z" },
   { id: "settings", label: "Settings", d: "M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M14 4v4M8 10v4M16 16v4" },
 ];
-const TITLES = { studio: "Dubbing Studio", library: "Library", bot: "Telegram bot", settings: "Settings" };
+const TITLES = { studio: "Dubbing Studio", speak: "Voice a message", library: "Library", bot: "Telegram bot", settings: "Settings" };
 
 // ---- top level: sign-in gate ----
 export default function App() {
@@ -167,6 +169,7 @@ function Studio({ user, onSignOut }) {
         )}
 
         {page === "library" && <Library onOpen={open} currentId={jobId} onNew={newDub} onChanged={refresh} onDeleted={newDub} />}
+        {page === "speak" && <Speak onError={setErr} />}
         {page === "bot" && <BotPage tg={tg} />}
         {page === "settings" && <Settings job={job} user={user} onSignOut={onSignOut} onChanged={refresh} onError={setErr} onNew={newDub} />}
 

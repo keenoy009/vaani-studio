@@ -7,17 +7,19 @@
 import express from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile, readdir, mkdir, rm } from "node:fs/promises";
+import { readFile, writeFile, readdir, mkdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
 import { extractAudio, transcribe, translate, voiceLine, mix, parseGlossary, missingTerms, TARGETS, SOURCES } from "../src/pipeline.mjs";
 import { duration, tts, createVoiceEmbedding } from "../src/tts.mjs";
+import { speakMessage, convertAudio, MAX_CHARS } from "../src/speak.mjs";
 import { startBot, telegramState } from "./bot.mjs";
 import { initAuth, authRouter, authenticate, requireAuth, sameOrigin, securityHeaders, canSee, INTERNAL_KEY } from "./auth.mjs";
 import { execFileSync } from "node:child_process";
 
 const PORT = process.env.PORT || 3001;
 const JOBS_DIR = resolve(process.env.JOBS_DIR || "work/jobs");
+const SPEAK_DIR = resolve(process.env.SPEAK_DIR || join(JOBS_DIR, "..", "speak")); // "Voice a message" audio files
 // Timbre v3.0 voices (from the Gnani docs). Default: one per speaker, rotating; the user can override per speaker.
 const VOICE_LIST = [
   { name: "Shivani", gender: "Female", persona: "Warm, empathetic" }, { name: "Avinash", gender: "Male", persona: "Professional" },
@@ -43,6 +45,11 @@ const ALLOWED_EXT = new Set([".mp4", ".mov", ".mkv", ".webm", ".m4v"]);
 const MIX_VERSION = 2;
 
 await mkdir(JOBS_DIR, { recursive: true });
+await mkdir(SPEAK_DIR, { recursive: true });
+// voice messages are throwaway: forget the ones older than a week
+for (const id of await readdir(SPEAK_DIR)) {
+  try { if (Date.now() - (await stat(join(SPEAK_DIR, id))).mtimeMs > 7 * 86400_000) await rm(join(SPEAK_DIR, id), { recursive: true, force: true }); } catch { /* ignore */ }
+}
 await initAuth();
 
 // ---------- job store (in memory, mirrored to work/jobs/<id>/job.json) ----------
@@ -382,6 +389,46 @@ app.post("/api/samples", async (req, res) => {
 });
 
 // ---------- voices ----------
+// ---------- Voice a message: text -> (translated) -> speech. No video. ----------
+// POST body: { text, to, from?: "auto" | language id, voice?: studio voice name, glossary?: "keep these words" list }
+const speakBusy = new Map(); // owner -> requests running right now (keeps one person from flooding the voice service)
+const SPEAK_ID = /^[0-9a-f-]{36}$/;
+app.post("/api/speak", async (req, res) => {
+  const owner = ownerOf(req);
+  const { text, to, from = "auto", voice = "Shivani" } = req.body ?? {};
+  if (typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "Type a message first." });
+  if (text.length > MAX_CHARS) return res.status(400).json({ error: `Keep the message under ${MAX_CHARS} characters.` });
+  if (!TARGETS[to]) return res.status(400).json({ error: "Choose a language to speak in." });
+  if (from !== "auto" && !TARGETS[from]) return res.status(400).json({ error: "Unknown language for the typed text." });
+  const v = voice === "default" ? "Shivani" : voice;
+  if (!VOICE_NAMES.has(v)) return res.status(400).json({ error: `Unknown voice ${voice}` });
+  let glossary = [];
+  try { glossary = parseGlossary(req.body.glossary); } catch (e) { return res.status(400).json({ error: e.message }); }
+  if ((speakBusy.get(owner) ?? 0) >= 4) return res.status(429).json({ error: "Too many voice messages at once. Wait a moment and try again." });
+  speakBusy.set(owner, (speakBusy.get(owner) ?? 0) + 1);
+  const id = randomUUID(), dir = join(SPEAK_DIR, id);
+  try {
+    const r = await speakMessage({ text, to, from, voice: v, glossary, dir });
+    await writeFile(join(dir, "meta.json"), JSON.stringify({ ownerId: owner, to, voice: v, text: r.text, createdAt: new Date().toISOString() }));
+    res.json({ id, to, voice: v, text: r.text, seconds: r.seconds, termsMissed: r.termsMissed });
+  } catch (e) {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    res.status(500).json({ error: e.message });
+  } finally { speakBusy.set(owner, Math.max(0, (speakBusy.get(owner) ?? 1) - 1)); }
+});
+// The audio: ?format=mp3 (default) | wav | ogg (Opus, for Telegram voice notes); ?download=1 saves it as a file.
+app.get("/api/speak/:id/audio", async (req, res) => {
+  if (!SPEAK_ID.test(req.params.id)) return res.status(404).json({ error: "Not found" });
+  const dir = join(SPEAK_DIR, req.params.id);
+  let meta; try { meta = JSON.parse(await readFile(join(dir, "meta.json"), "utf8")); } catch { return res.status(404).json({ error: "Not found" }); }
+  if (!canSee(req.user, { ownerId: meta.ownerId })) return res.status(404).json({ error: "Not found" });
+  const format = ["mp3", "wav", "ogg"].includes(req.query.format) ? req.query.format : "mp3";
+  const file = join(dir, `speech.${format}`);
+  try { if (!existsSync(file)) convertAudio(join(dir, "speech.wav"), format, file); } catch { return res.status(500).json({ error: "Could not prepare the audio." }); }
+  if (req.query.download) return res.download(file, `vaani_${meta.to}.${format}`);
+  res.type({ mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg" }[format]).sendFile(file);
+});
+
 app.get("/api/voices", (req, res) => res.json(VOICE_LIST));
 app.get("/api/jobs/:id/voices", (req, res) => {
   const job = getJob(req, res); if (!job) return;

@@ -139,14 +139,16 @@ const withoutTerms = (text, keep = []) => keep.reduce((acc, k) => acc.replace(ne
 export const missingTerms = (text, keep = []) => keep.filter((k) => !hasTerm(text, k));
 
 /** LLM translate. Returns lines [{...segment, source_text, text, lang, edited, keep, termsMissed}]. */
-export async function translate(segments, targetKey, sourceKey = "hi", glossary = []) {
-  const t = TARGETS[targetKey], s = SOURCES[sourceKey];
+// sourceKey: a spoken language, any dub-into language (typed text), or "auto" (detect it). allowSame: text already in the target language may come back unchanged (used for typed messages).
+export async function translate(segments, targetKey, sourceKey = "hi", glossary = [], { allowSame = false } = {}) {
+  const t = TARGETS[targetKey], s = SOURCES[sourceKey] ?? TARGETS[sourceKey] ?? { name: "the original-language" };
   const keepNote = glossary.length
     ? `KEEP-WORDS: when the speaker says one of these words, write it in the dub EXACTLY as given, unchanged, not translated or respelled: ` +
       glossary.map((g) => `"${g.from}" -> "${g.to}"`).join(", ") + `. `
     : "";
   const system =
     `You are a professional dubbing translator. Translate ${s.name} speech into natural, spoken ${t.name} for a voice-over. ` +
+    (sourceKey === "auto" ? `Detect the language of the input yourself; if a line is already in ${t.name}, return it unchanged. ` : "") +
     (t.note ?? "") +
     `The output MUST be written in the native ${t.name} script (for example "${t.example}"), NOT Bengali, Devanagari, or Latin letters` +
     (t.note ? " (Devanagari is correct for Konkani)" : "") + `. ` +
@@ -161,7 +163,7 @@ export async function translate(segments, targetKey, sourceKey = "hi", glossary 
     const byId = new Map(result.map((r) => [r.id, r.text]));
     const keepOf = new Map(segments.map((x) => [x.id, termsFor(x.text, glossary)]));
     const same = (x) => (byId.get(x.id) ?? "").trim() === x.text.trim(); // untranslated copy of the source
-    const scriptOk = segments.every((x) => inRightScript(withoutTerms(byId.get(x.id) ?? "", keepOf.get(x.id)), t) && !same(x));
+    const scriptOk = segments.every((x) => inRightScript(withoutTerms(byId.get(x.id) ?? "", keepOf.get(x.id)), t) && (allowSame || !same(x)));
     if (!scriptOk) continue;
     const lines = segments.map((x) => {
       const text = byId.get(x.id), keep = keepOf.get(x.id);
