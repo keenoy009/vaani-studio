@@ -27,6 +27,22 @@ const NAV = [
 const TITLES = { studio: "Dubbing Studio", speak: "Voice a message", library: "Library", bot: "Telegram bot", settings: "Settings" };
 
 // ---- top level: sign-in gate ----
+// Shown inside someone else's page (e.g. the Hugging Face Space page). Browsers block sign-in cookies in frames,
+// so send people to the full app in its own tab.
+const FRAMED = (() => { try { return window.self !== window.top; } catch { return true; } })();
+function OpenInTab() {
+  return (
+    <div className="flex min-h-screen flex-col items-center justify-center gap-5 bg-bg p-8 text-center">
+      <span className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-gradient-to-br from-[#8B7BFF] to-[#C8BFFF]">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0B0A18" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M5 9v6M9.5 5v14M14.5 8v8M19 10.5v3" /></svg>
+      </span>
+      <h1 className="m-0 text-[32px] font-extrabold tracking-[-0.03em]">Vaani Studio</h1>
+      <p className="m-0 max-w-[420px] text-[15px] leading-relaxed text-mute">Dub videos and voice messages into Indian languages. Open the studio in its own tab to sign in.</p>
+      <a href={location.href} target="_blank" rel="noopener" className="inline-flex h-12 items-center rounded-full bg-lav px-7 text-sm font-bold text-[#0B0A18] no-underline">Open Vaani Studio</a>
+    </div>
+  );
+}
+
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = still checking, null = signed out
   const [signupOpen, setSignupOpen] = useState(true);
@@ -41,6 +57,7 @@ export default function App() {
   }, []);
   const signOut = async () => { try { await api.logout(); } catch { /* the cookie is cleared below either way */ } setUser(null); };
 
+  if (FRAMED) return <OpenInTab />;
   if (user === undefined) {
     return <div className="flex min-h-screen items-center justify-center bg-bg" role="status" aria-label="Loading">
       <span className="pulse flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#8B7BFF] to-[#C8BFFF]">

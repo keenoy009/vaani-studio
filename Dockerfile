@@ -8,6 +8,9 @@ COPY client/package*.json client/
 RUN npm --prefix client ci
 COPY . .
 RUN npm run build && rm -rf client/node_modules
+# Run as the image's normal user (uid 1000), not root. Hugging Face Spaces requires uid 1000; it is safer everywhere.
+RUN mkdir -p /app/work && chown -R node:node /app
+USER node
 ENV NODE_ENV=production PORT=3001 TRUST_PROXY=true
 EXPOSE 3001
 # Everything the app saves (accounts, videos, dubs, voice messages) lives in /app/work: mount a persistent disk there.

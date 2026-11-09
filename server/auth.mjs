@@ -124,7 +124,8 @@ async function startSession(res, req, user, remember) {
 
 // ---------------- middleware ----------------
 export function securityHeaders(req, res, next) {
-  res.set({ "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "same-origin", "Cross-Origin-Opener-Policy": "same-origin" });
+  // Only our own pages and the Hugging Face Space page may show the app inside a frame (blocks clickjacking elsewhere).
+  res.set({ "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "frame-ancestors 'self' https://huggingface.co", "Referrer-Policy": "same-origin", "Cross-Origin-Opener-Policy": "same-origin" });
   next();
 }
 // Hosts that may legitimately call the API from a browser, in addition to the host the request arrived on.

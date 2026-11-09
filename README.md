@@ -1,3 +1,14 @@
+---
+title: Vaani Studio
+emoji: 🎙️
+colorFrom: purple
+colorTo: pink
+sdk: docker
+app_port: 3001
+pinned: false
+short_description: Dub videos into Indian languages with AI voices
+---
+
 # Vaani Studio
 
 A dubbing studio for Indian languages, built for the Gnani AI challenge. Upload a video, pick the languages, and get it back dubbed, with a separate voice for each speaker. A Telegram bot delivers dubs to private chats and groups.
