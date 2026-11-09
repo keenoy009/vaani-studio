@@ -83,20 +83,19 @@ One container runs everything (website, API and Telegram bot). The `Dockerfile` 
 
 Without Docker: `npm install`, `npm --prefix client install`, `npm run build`, then `npm run start:prod` with the variables above set in the environment.
 
-## Free deployment (Telegram only)
+## Free deployment (Render)
 
-People use Vaani **through the Telegram bot**; nobody needs the website. This runs on Render's free plan (`render.yaml` is already in the repo).
+The website and the Telegram bot run on Render's free plan (`render.yaml` is already in the repo). Hugging Face Spaces now charges for Docker, so it is not an option for this app.
 
 1. On render.com create an account and choose **New → Blueprint**, then pick this GitHub repo. Render reads `render.yaml`.
-2. When asked, paste your `GNANI_API_KEY`, `LLM_API_KEY` and `TELEGRAM_BOT_TOKEN`. They stay on Render and are never in the repo.
+2. When asked, paste your `GNANI_API_KEY` and `LLM_API_KEY`, and `TELEGRAM_BOT_TOKEN` if you want the bot there too (leave it empty for the website only). They stay on Render and are never in the repo.
 3. Wait for the first build to finish. The bot switches itself to *webhook mode*: Telegram sends messages to the app, which also wakes it up. Watch the logs for `[bot] online as @... (webhook)`.
 4. **Stop running the bot on your own computer** (the same bot token can only be used in one place), then message the bot on Telegram.
 
 What to expect on the free plan:
 - The app sleeps after about 15 minutes without visitors. The first message after a quiet period can take 30–60 seconds, and may need to be sent again.
 - Optional: a free uptime checker (for example UptimeRobot) that opens `https://YOUR-APP.onrender.com/healthz` every 5 minutes keeps it awake.
-- There is **no persistent disk**, so saved data is wiped on every restart or redeploy: finished dubs, the voice-message history and the bot's list of groups. Dubs are delivered into the Telegram chat when they finish, so users keep their copy there.
-- Sign-ups are closed (`ALLOW_SIGNUP=false`), so the website stays locked and only the bot works.
+- There is **no persistent disk**, so saved data is wiped on every restart or redeploy: accounts, finished dubs, the voice-message history and the bot's list of groups. After a restart, sign up again yourself first: the first account becomes the owner. Dubs are delivered into the Telegram chat when they finish, so users keep their copy there.
 - The daily limits below still protect your Gnani and Gemini quota.
 
 If you set a persistent disk later, or use a different host, the paid steps above apply.

@@ -1,6 +1,6 @@
-# Free, Telegram-only deployment on Render (see "Free deployment" in the README).
-# The free plan has no persistent disk and sleeps when idle, so: the bot uses a webhook (Telegram wakes the app),
-# and sign-ups are closed (nobody needs a website account; people use the bot).
+# Free deployment on Render: the website for everyone + the Telegram bot (see "Free deployment" in the README).
+# The free plan has no persistent disk and sleeps when idle, so the bot uses a webhook (Telegram wakes the app)
+# and everything saved is wiped when the app restarts.
 services:
   - type: web
     name: vaani-studio
@@ -13,8 +13,6 @@ services:
       - key: LLM_API_KEY
         sync: false
       - key: TELEGRAM_BOT_TOKEN
-        sync: false
+        sync: false          # optional: leave empty to run the website only
       - key: LLM_PROVIDER
         value: gemini
-      - key: ALLOW_SIGNUP
-        value: "false"
